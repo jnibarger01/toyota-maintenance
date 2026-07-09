@@ -1,0 +1,23 @@
+{
+  "name": "toyota-maintenance-cockpit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Service-advisor maintenance cockpit: Xtime/Airtable JSONL artifacts -> SQLite lookup DB -> Fastify API -> React UI. Read-only, offline customer lookup.",
+  "workspaces": [
+    "etl",
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "etl": "npm run build -w etl && node etl/dist/build-db.js",
+    "etl:fixtures": "npm run build -w etl && node etl/dist/build-db.js --data-dir fixtures --out fixtures/tmc-fixture.db",
+    "api": "npm run build -w server && node server/dist/index.js",
+    "dev:api": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "test": "npm run build -w etl && npm run test -w etl && npm run test -w server",
+    "build": "npm run build -w etl && npm run build -w server && npm run build -w web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
