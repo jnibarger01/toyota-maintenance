@@ -53,16 +53,28 @@ Environment: `TMC_DB` (db path, default `tmc.db`), `TMC_PORT` (default `8791`), 
 ## What the ETL enforces (fail-closed)
 
 `etl/build-db.js` streams the JSONL artifacts and **refuses to produce a database** if anything
-is inconsistent: a schedule whose Config Key ≠ `schedule_key`, a missing schedule template hash,
-or an engine string it cannot parse. Errors are collected, printed, the partial DB is deleted,
-and the process exits 1. On success it records `import_meta` with the build timestamp, ETL
-version, and a SHA-256 of every source file — so any DB can be traced back to the exact
-artifacts that produced it.
+is inconsistent: a config whose Config Key ≠ `schedule_key`, a missing schedule template hash,
+an engine string it cannot parse, a duplicate vehicle configuration (UNIQUE trap), or an edge
+referencing an unknown config/task (foreign keys are enforced during the build). Errors are
+collected, printed, the partial DB is deleted, and the process exits 1. On success it records a
+single-row `import_meta` (build timestamp, ETL version, source dir, artifact manifest) plus one
+`artifact_files` row per source file (SHA-256, line count, byte count) — so any DB traces back
+to the exact artifacts that produced it. Non-fatal anomalies (empty templates, provenance
+coverage gaps, `--skip-edges`) land in `import_warnings`.
 
-Preserved verbatim per constraint: `schedule_key`, `schedule_hash`, `source`, every source item
-field (`service_id`, `service_name`, `description`, `category`, `priority`, `order`, `menu`,
-`months`), Airtable record IDs + import timestamps, and the raw schedule JSON
-(`schedule_templates.raw_json`) for audit.
+Preserved verbatim per constraint: `config_key` (the upstream `schedule_key`), `schedule_hash`,
+`source`, every source item field (`service_id`, `service_name`, `description`, `category`,
+`priority`, `order`, `menu`, `months`), the full Airtable `Description` contract text
+(`vehicle_configs.raw_description`), Airtable record IDs + timestamps, and the raw schedule JSON
+(`schedule_templates.schedule_json`) for audit.
+
+Schema v0.2 tables: `import_meta` (one row per build) · `artifact_files` · `vehicle_configs` ·
+`schedule_templates` (+`is_empty`) · `schedule_items` (runtime due engine) · `maintenance_tasks`
+· `schedule_task_edges` (FK-enforced) · `service_task_mappings` — the **only** table where op
+codes, labor hours, and menu pricing may ever live; dealership-owned, never written by the ETL —
+· `import_warnings`, plus views `vehicle_option_years`, `vehicle_option_models`, and
+`maintenance_due_view`. No VIN, customer, price, labor, or fee columns exist in any ingestion
+table, and a schema test enforces that.
 
 Known upstream state: one template is legitimately empty (`sha256("[]")`), referenced by 20
 configurations (2010 Corolla Normal rows and 2026 bZ EVs). The ETL loads them and the API/UI
@@ -105,7 +117,7 @@ sheet. The UI keeps no persistent state (no localStorage, no cookies).
 ## Tests
 
 ```bash
-npm test        # 39 tests: etl 13, server 26
+npm test        # 46 tests: etl 20 (incl. schema guarantees), server 26
 ```
 
 Coverage includes the required cases: **2020 4Runner SR5 4WD at ~70,000 mi** (7 Normal items, 14
@@ -119,7 +131,7 @@ you want one to poke at).
 ## Layout
 
 ```
-etl/      schema.sql, lib.ts (parsers, fail-closed), build-db.ts (streaming JSONL → SQLite)
+etl/      schema.sql (v0.2), lib.ts (parsers, fail-closed), build-db.ts (streaming JSONL → SQLite)
 server/   milestones.ts (pure interval math), queries.ts (read-only lookup), app.ts (Fastify)
 web/      React cockpit (VehicleForm, MilestoneRail, Grid/List/Guide views, PrintSheet)
 fixtures/ 2020 4Runner artifact slice (JSONL) used by the test suite

@@ -49,6 +49,11 @@ export interface ItemRow {
   sort_order: number | null;
 }
 
+/** vehicle_configs -> ScheduleRow projection; config_key is the upstream schedule_key. */
+const SCHEDULE_ROW_COLS = `config_key AS schedule_key, schedule_hash, year, make, model, trim,
+  engine, engine_type, engine_size, engine_variant, drivetrain, transmission,
+  driving_condition, schedule_name, source, last_updated`;
+
 const FILTER_COLS: Array<[keyof VehicleFilters, string]> = [
   ["year", "year"],
   ["model", "model"],
@@ -84,14 +89,21 @@ export class Lookup {
   close(): void { this.db.close(); }
 
   meta(): Record<string, string> {
-    const rows = this.db.prepare("SELECT key, value FROM import_meta").all() as Array<{ key: string; value: string }>;
-    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    const row = this.db.prepare(
+      "SELECT built_at, etl_version, source_dir FROM import_meta WHERE id = 1"
+    ).get() as { built_at?: string; etl_version?: string; source_dir?: string } | undefined;
+    if (!row) return {};
+    const out: Record<string, string> = {};
+    if (row.built_at) out["built_at"] = row.built_at;
+    if (row.etl_version) out["etl_version"] = row.etl_version;
+    if (row.source_dir) out["source_dir"] = row.source_dir;
+    return out;
   }
 
   counts(): { schedules: number; templates: number; items: number } {
     const one = (sql: string) => (this.db.prepare(sql).get() as { n: number }).n;
     return {
-      schedules: one("SELECT COUNT(*) n FROM vehicle_schedules"),
+      schedules: one("SELECT COUNT(*) n FROM vehicle_configs"),
       templates: one("SELECT COUNT(*) n FROM schedule_templates"),
       items: one("SELECT COUNT(*) n FROM schedule_items"),
     };
@@ -101,13 +113,13 @@ export class Lookup {
   options(filters: VehicleFilters): Record<string, unknown> {
     const { sql, params } = whereClause(filters);
     const distinct = (col: string, orderBy = col) =>
-      this.db.prepare(`SELECT DISTINCT ${col} AS v FROM vehicle_schedules ${sql} ORDER BY ${orderBy}`)
+      this.db.prepare(`SELECT DISTINCT ${col} AS v FROM vehicle_configs ${sql} ORDER BY ${orderBy}`)
         .all(...params).map((r) => (r as { v: unknown }).v);
     const engines = this.db.prepare(
       `SELECT DISTINCT engine, engine_type, engine_size, engine_variant
-       FROM vehicle_schedules ${sql} ORDER BY engine_type, engine_size`
+       FROM vehicle_configs ${sql} ORDER BY engine_type, engine_size`
     ).all(...params);
-    const match = this.db.prepare(`SELECT COUNT(*) n FROM vehicle_schedules ${sql}`).get(...params) as { n: number };
+    const match = this.db.prepare(`SELECT COUNT(*) n FROM vehicle_configs ${sql}`).get(...params) as { n: number };
     return {
       years: distinct("year", "year DESC"),
       models: distinct("model"),
@@ -125,17 +137,17 @@ export class Lookup {
   /** Resolve filters to schedule rows. Exactly-one is the caller's contract for /due. */
   resolve(filters: VehicleFilters): ScheduleRow[] {
     const { sql, params } = whereClause(filters);
-    return this.db.prepare(`SELECT * FROM vehicle_schedules ${sql} ORDER BY driving_condition`).all(...params) as ScheduleRow[];
+    return this.db.prepare(`SELECT ${SCHEDULE_ROW_COLS} FROM vehicle_configs ${sql} ORDER BY driving_condition`).all(...params) as ScheduleRow[];
   }
 
   schedule(scheduleKey: string): ScheduleRow | undefined {
-    return this.db.prepare("SELECT * FROM vehicle_schedules WHERE schedule_key = ?").get(scheduleKey) as ScheduleRow | undefined;
+    return this.db.prepare(`SELECT ${SCHEDULE_ROW_COLS} FROM vehicle_configs WHERE config_key = ?`).get(scheduleKey) as ScheduleRow | undefined;
   }
 
   /** Sibling schedule: same config, other driving condition. */
   sibling(row: ScheduleRow): ScheduleRow | undefined {
     return this.db.prepare(
-      `SELECT * FROM vehicle_schedules
+      `SELECT ${SCHEDULE_ROW_COLS} FROM vehicle_configs
        WHERE year=? AND model=? AND trim=? AND engine=? AND drivetrain=? AND transmission=?
          AND driving_condition <> ?`
     ).get(row.year, row.model, row.trim, row.engine, row.drivetrain, row.transmission, row.driving_condition) as ScheduleRow | undefined;
@@ -144,7 +156,7 @@ export class Lookup {
   provenance(scheduleKey: string): Record<string, unknown> {
     const row = this.schedule(scheduleKey);
     if (!row) return {};
-    const at = this.db.prepare("SELECT airtable_record_id, airtable_created_at FROM schedule_provenance WHERE schedule_key = ?")
+    const at = this.db.prepare("SELECT airtable_record_id, airtable_created_at FROM vehicle_configs WHERE config_key = ?")
       .get(scheduleKey) as { airtable_record_id?: string; airtable_created_at?: string } | undefined;
     const meta = this.meta();
     return {
