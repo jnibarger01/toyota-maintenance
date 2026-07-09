@@ -111,9 +111,10 @@ npm test        # 39 tests: etl 13, server 26
 Coverage includes the required cases: **2020 4Runner SR5 4WD at ~70,000 mi** (7 Normal items, 14
 Severe, exact item names, Normal↔Severe delta) and **interval rounding** (68,500→70k,
 72,600→75k, 71,900→70k, 67,400→65k, ties 72,500→75k and 67,500→70k, clamp 1,200→5k, cycle wrap
-at grid max, extrapolation 125k→5k and 190k→70k). Server tests run against a committed 2.6 MB
-fixture DB built from a real 2020 4Runner artifact slice (`fixtures/`, rebuildable with
-`npm run etl:fixtures` after regenerating the slice via `scripts/make_fixtures.py`).
+at grid max, extrapolation 125k→5k and 190k→70k). Server tests build a throwaway DB from the
+committed 2020 4Runner artifact slice in `fixtures/` (regenerable from full artifacts via
+`scripts/make_fixtures.py`; `npm run etl:fixtures` builds `fixtures/tmc-fixture.db` on disk if
+you want one to poke at).
 
 ## Layout
 
@@ -121,6 +122,6 @@ fixture DB built from a real 2020 4Runner artifact slice (`fixtures/`, rebuildab
 etl/      schema.sql, lib.ts (parsers, fail-closed), build-db.ts (streaming JSONL → SQLite)
 server/   milestones.ts (pure interval math), queries.ts (read-only lookup), app.ts (Fastify)
 web/      React cockpit (VehicleForm, MilestoneRail, Grid/List/Guide views, PrintSheet)
-fixtures/ 2020 4Runner artifact slice + prebuilt fixture DB for tests
+fixtures/ 2020 4Runner artifact slice (JSONL) used by the test suite
 scripts/  make_fixtures.py — regenerate the fixture slice from full artifacts
 ```
