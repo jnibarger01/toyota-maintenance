@@ -70,10 +70,15 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header no-print">
-        <span className="app-mark" aria-hidden="true" />
-        <h1>Toyota Maintenance Cockpit</h1>
-        <span className="app-tag">factory schedules · local read-only lookup</span>
+        {/* Official Hendrick Automotive Group mark (from brand-standard EPS, unaltered).
+            A dealership-specific logo must come from HendrickBrandSupport.com. */}
+        <img className="brand-logo" src="/brand/hag-color.png" alt="Hendrick Automotive Group™" />
+        <div className="app-title-block">
+          <h1>Toyota Maintenance Cockpit</h1>
+          <span className="app-tag">Hendrick Toyota Merriam · Service Department · factory schedule lookup</span>
+        </div>
       </header>
+      <div className="speed-lines no-print" aria-hidden="true"><span /><span /><span /></div>
 
       <main className="app-main no-print">
         {s.error ? (
@@ -111,7 +116,8 @@ export default function App() {
       {s.result ? <PrintSheet result={s.result} /> : null}
 
       <footer className="app-footer no-print">
-        Read-only factory schedule lookup · no VIN or customer data · prices only from the dealership service menu
+        Factory maintenance schedules, straight from the source — no VIN needed, no guesswork.
+        Prices appear only when they come from our own service menu.
       </footer>
     </div>
   );

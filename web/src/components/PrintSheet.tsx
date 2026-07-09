@@ -19,7 +19,11 @@ export function PrintSheet({ result }: { result: LookupResult }) {
   return (
     <section className="print-root" aria-hidden="true">
       <header className="print-header avoid-break">
-        {/* Dealership / advisor header placeholder — replace with letterhead in production. */}
+        {/* Black Hendrick Automotive Group mark per brand rule for monochrome printing. */}
+        <div className="print-brandline">
+          <img className="print-logo" src="/brand/hag-black.png" alt="Hendrick Automotive Group™" />
+          <span className="print-store">Hendrick Toyota Merriam</span>
+        </div>
         <h1>Service Department · Maintenance Review</h1>
         <p className="print-advisor-line">Advisor: ____________________&nbsp;&nbsp;&nbsp;Date: ______________</p>
       </header>

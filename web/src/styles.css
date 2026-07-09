@@ -1,167 +1,202 @@
-/* Toyota Maintenance Cockpit — service-lane UI.
-   Clean white/gray surfaces, blue section headers, orange selected/action.
-   Large targets, visible focus, honest print sheet. */
+/* Toyota Maintenance Cockpit — Hendrick Automotive Group brand standards (2025).
+ *
+ * Palette: the three approved brand colors ONLY —
+ *   Hendrick Blue #00558C (Pantone 7462 C), Black #000000, White #FFFFFF.
+ * Every other value below is a tint/shade of those three (blue tints for
+ * surfaces and hover, neutral grays as tints of black). No third hue exists
+ * anywhere in this UI.
+ *
+ * Typography: Montserrat for all text (brand primary). Headers use Montserrat
+ * Extra Bold in caps — the brand guide's recommended safe alternative to
+ * Eurostile for in-context headers. No second font family is loaded.
+ *
+ * Logo: official Hendrick Automotive Group artwork rasterized from the
+ * brand-standard EPS files (unaltered, native proportions, ™ intact).
+ * Clear space >= 1/4 logo height is enforced around the mark. The dealership
+ * (Hendrick Toyota Merriam) logo, if desired, must come from
+ * HendrickBrandSupport.com — never store-created.
+ */
 
 :root {
-  --blue: #0b3a6f;          /* section headers */
-  --blue-tint: #eef3fa;
-  --orange: #e8630a;        /* selected state / primary action */
-  --orange-dark: #c85408;
-  --ink: #1f2429;
-  --muted: #5c6670;
-  --line: #d9dde2;
-  --bg: #f4f5f7;
+  --blue: #00558C;            /* Hendrick Blue — Pantone 7462 C */
+  --blue-deep: #003c63;       /* shade of Hendrick Blue (hover) */
+  --blue-tint: #e6eff5;       /* 10% tint of Hendrick Blue (surfaces) */
+  --blue-tint-strong: #cfe0eb;/* 20% tint (current-column cells) */
+  --black: #000000;
+  --ink: #101215;             /* near-black text (tint of black) */
+  --muted: #55595e;           /* gray = tint of black */
+  --line: #d7d9db;            /* gray = tint of black */
+  --bg: #f4f5f6;              /* gray = tint of black */
   --panel: #ffffff;
-  --amber: #a05a00;
-  --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font: "Montserrat", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 17px; line-height: 1.45; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 16.5px; line-height: 1.5; }
 
 button, input, select { font: inherit; color: inherit; }
-:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+.num { font-variant-numeric: tabular-nums; }
 
 .app { max-width: 1180px; margin: 0 auto; padding: 0 20px 48px; }
 
-.app-header { display: flex; align-items: baseline; gap: 12px; padding: 22px 0 14px; border-bottom: 3px solid var(--blue); flex-wrap: wrap; }
-.app-mark { width: 14px; height: 14px; background: var(--orange); border-radius: 3px; align-self: center; }
-.app-header h1 { font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
-.app-tag { color: var(--muted); font-size: 14px; }
-.app-main { padding-top: 24px; }
+/* Header: official HAG mark (clear space via padding) + app identity. */
+.app-header { display: flex; align-items: center; gap: 28px; padding: 16px 0 14px; flex-wrap: wrap; }
+.brand-logo { height: 46px; width: auto; display: block; padding: 12px 0; } /* 12px ≈ 1/4 logo height isolation */
+.app-title-block { display: flex; flex-direction: column; gap: 2px; }
+.app-header h1 {
+  font-size: 21px; font-weight: 800; margin: 0;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--black);
+}
+.app-tag { color: var(--muted); font-size: 13.5px; font-weight: 500; letter-spacing: 0.02em; }
+
+/* Signature: motorsports speed lines under the header (separate element —
+   never attached to or overlapping the logo mark). */
+.speed-lines { display: grid; gap: 4px; margin-bottom: 24px; }
+.speed-lines span { height: 3px; background: var(--black); border: none; }
+.speed-lines span:nth-child(1) { width: 100%; background: var(--blue); }
+.speed-lines span:nth-child(2) { width: 62%; }
+.speed-lines span:nth-child(3) { width: 34%; height: 2px; }
+
 .app-footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; }
 
-/* Section headers — the blue bars. */
+/* Section headers — Hendrick Blue bars, Montserrat Extra Bold caps. */
 .section-header {
   background: var(--blue); color: #fff;
-  font-size: 18px; font-weight: 600; letter-spacing: 0.01em;
-  padding: 10px 16px; border-radius: 6px; margin: 0 0 16px;
+  font-size: 15.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 11px 16px; border-radius: 4px; margin: 0 0 16px;
 }
-.section-header-sub { font-size: 16px; margin: 0 0 10px; }
+.section-header-sub { font-size: 13.5px; margin: 0 0 10px; }
 .section-header-row { display: flex; align-items: center; gap: 14px; }
 .section-header-row .section-header { flex: 1; }
 
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; }
 
-/* Buttons */
-.btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 12px 22px; font-weight: 600; cursor: pointer; min-height: 48px; }
-.btn-primary { background: var(--orange); border-color: var(--orange); color: #fff; }
-.btn-primary:hover { background: var(--orange-dark); }
-.btn-primary:disabled { background: #f0b98f; border-color: #f0b98f; cursor: not-allowed; }
+/* Buttons — primary action is Hendrick Blue. */
+.btn { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 12px 24px; font-weight: 700; cursor: pointer; min-height: 48px; letter-spacing: 0.02em; }
+.btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; text-transform: uppercase; font-size: 14.5px; letter-spacing: 0.05em; }
+.btn-primary:hover { background: var(--blue-deep); }
+.btn-primary:disabled { background: var(--blue-tint-strong); border-color: var(--blue-tint-strong); color: var(--muted); cursor: not-allowed; }
 .btn-secondary:hover { border-color: var(--blue); }
-.btn-link { border: none; background: none; color: var(--blue); text-decoration: underline; min-height: 44px; padding: 8px 10px; }
+.btn-link { border: none; background: none; color: var(--blue); text-decoration: underline; min-height: 44px; padding: 8px 10px; font-weight: 600; }
 
 /* Step 1 & 2 — tile grids */
 .tile-grid { display: grid; gap: 12px; }
 .tile-grid-years { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 .tile-grid-models { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 .tile {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  padding: 18px 10px; font-size: 20px; font-weight: 600; cursor: pointer; min-height: 64px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 18px 10px; font-size: 19px; font-weight: 700; cursor: pointer; min-height: 64px;
 }
-.tile:hover { border-color: var(--orange); box-shadow: inset 0 0 0 1px var(--orange); }
-.tile-model { font-size: 17px; }
+.tile:hover { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); color: var(--blue); }
+.tile-model { font-size: 16px; letter-spacing: 0.02em; }
 
 /* Step 3 — details form */
 .details-form { display: flex; flex-direction: column; gap: 20px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
-.field-label { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.field-label { font-size: 12.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
 .field select, .field input {
-  border: 1px solid var(--line); border-radius: 8px; padding: 12px 12px; background: #fff; min-height: 48px; font-size: 17px;
+  border: 1px solid var(--line); border-radius: 6px; padding: 12px 12px; background: #fff; min-height: 48px; font-size: 16.5px;
 }
-.field-hint { font-size: 13px; color: var(--muted); }
+.field-hint { font-size: 12.5px; color: var(--muted); }
 .chip-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .chip {
   border: 2px solid var(--line); background: #fff; border-radius: 999px;
-  padding: 10px 22px; font-weight: 600; cursor: pointer; min-height: 48px;
+  padding: 10px 24px; font-weight: 700; cursor: pointer; min-height: 48px;
 }
-.chip[aria-pressed="true"] { background: var(--orange); border-color: var(--orange); color: #fff; }
+.chip:hover { border-color: var(--blue); }
+.chip[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
 .form-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 
 /* Results header + tabs */
 .results-header { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
-.results-title { margin: 0 0 4px; font-size: 24px; }
-.results-sub { margin: 0; color: var(--muted); }
-.results-note { margin: 6px 0 0; color: var(--amber); font-size: 14.5px; }
+.results-title { margin: 0 0 4px; font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; }
+.results-sub { margin: 0; color: var(--muted); font-weight: 500; }
+.results-note { margin: 6px 0 0; color: var(--black); font-size: 14px; font-style: italic; }
 .results-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 .source-badge {
   display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line);
-  border-radius: 999px; padding: 6px 14px; font-size: 13.5px; background: var(--blue-tint);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; background: var(--blue-tint);
 }
-.source-badge-system { font-weight: 700; color: var(--blue); }
-.source-badge-ref { font-family: var(--mono); color: var(--muted); }
+.source-badge-system { font-weight: 800; color: var(--blue); letter-spacing: 0.03em; }
+.source-badge-ref { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 
 .tabs { display: flex; gap: 6px; border-bottom: 3px solid var(--blue); margin-bottom: 0; }
 .tab {
-  border: 1px solid var(--line); border-bottom: none; background: #e9ecef;
-  border-radius: 8px 8px 0 0; padding: 12px 26px; font-weight: 600; cursor: pointer; min-height: 48px;
+  border: 1px solid var(--line); border-bottom: none; background: #ececee;
+  border-radius: 6px 6px 0 0; padding: 12px 28px; font-weight: 700; cursor: pointer; min-height: 48px;
+  text-transform: uppercase; font-size: 13.5px; letter-spacing: 0.05em;
 }
 .tab[aria-selected="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
-.tab-panel { border-top: none; border-radius: 0 0 8px 8px; }
+.tab-panel { border-top: none; border-radius: 0 0 6px 6px; }
 
 /* Grid tab */
 .grid-scroll { overflow-x: auto; }
 .mx-grid { border-collapse: collapse; width: 100%; min-width: 720px; }
 .mx-grid th, .mx-grid td { border: 1px solid var(--line); padding: 10px 12px; }
-.mx-grid thead th { background: var(--blue); color: #fff; font-weight: 600; }
-.mx-grid thead th.current { background: var(--orange); }
-.current-tag { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.mx-grid thead th { background: var(--blue); color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mx-grid thead th.current { background: var(--black); }
+.current-tag { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; }
 .mx-grid-service { text-align: left; font-weight: 500; background: #fff; min-width: 300px; }
-.mx-cat-row th { background: var(--blue-tint); color: var(--blue); text-align: left; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
-.mx-cell { text-align: center; font-size: 18px; color: var(--blue); }
-.mx-cell.current { background: #fdf1e7; font-weight: 700; color: var(--orange-dark); }
-.advisor-label { display: inline-block; margin-left: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--blue); background: var(--blue-tint); border-radius: 4px; padding: 1px 7px; }
+.mx-cat-row th { background: var(--blue-tint); color: var(--blue); text-align: left; font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+.mx-cell { text-align: center; font-size: 17px; color: var(--blue); }
+.mx-cell.current { background: var(--blue-tint-strong); font-weight: 800; color: var(--blue-deep); }
+.advisor-label { display: inline-block; margin-left: 8px; font-size: 11.5px; font-weight: 700; color: var(--blue); background: var(--blue-tint); border-radius: 3px; padding: 2px 7px; letter-spacing: 0.04em; }
 
 /* List + guide */
 .list-group { margin-bottom: 22px; }
-.list-group-due .section-header-sub { background: var(--orange); }
-.list-group-overdue .section-header-sub { background: var(--amber); }
+.list-group-due .section-header-sub { background: var(--black); }
+.list-group-overdue .section-header-sub { background: #fff; color: var(--black); border: 2px solid var(--black); }
 .task-list { list-style: none; margin: 0; padding: 0; }
 .task-line { display: flex; align-items: center; gap: 10px; padding: 10px 6px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .task-line:last-child { border-bottom: none; }
 .task-name { font-weight: 500; }
-.task-price { margin-left: auto; font-family: var(--mono); font-weight: 600; }
-.tag { font-size: 12.5px; font-weight: 700; border-radius: 4px; padding: 2px 8px; background: #e9ecef; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.tag-severe { background: #fceee2; color: var(--orange-dark); }
-.tag-internal { background: var(--ink); color: #fff; }
+.task-price { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tag { font-size: 11.5px; font-weight: 800; border-radius: 3px; padding: 2px 8px; background: #ececee; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.tag-severe { background: var(--black); color: #fff; }
+.tag-internal { background: var(--black); color: #fff; }
 .guide-section { margin-bottom: 24px; }
 .guide-section p { max-width: 72ch; }
-.guide-internal { border: 2px dashed var(--line); border-radius: 8px; padding: 14px 16px; background: #fafbfc; }
+.guide-internal { border: 2px dashed var(--line); border-radius: 6px; padding: 14px 16px; background: var(--bg); }
 
 /* States */
 .state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 20px; text-align: center; }
 .state-loading { flex-direction: row; justify-content: center; color: var(--muted); }
-.state-title { font-size: 19px; font-weight: 600; margin: 0; }
+.state-title { font-size: 18px; font-weight: 700; margin: 0; }
 .state-hint { color: var(--muted); margin: 0; }
-.spinner { width: 20px; height: 20px; border: 3px solid var(--line); border-top-color: var(--orange); border-radius: 50%; animation: spin 0.9s linear infinite; }
+.spinner { width: 20px; height: 20px; border: 3px solid var(--line); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 
 /* ------------------------------------------------------------------ */
-/* Print sheet: hidden on screen; the ONLY thing visible when printing. */
+/* Print sheet: hidden on screen; the ONLY thing visible when printing.
+   Uses the black HAG logo per brand rule for monochrome printing.     */
 .print-root { display: none; }
 
 @media print {
   /* hide navigation/buttons/forms — app chrome never prints */
-  .no-print, .app-header, .app-footer, .app-main, nav, form, button, .tabs { display: none !important; }
+  .no-print, .app-header, .app-footer, .app-main, .speed-lines, nav, form, button, .tabs { display: none !important; }
 
   .print-root { display: block; }
   @page { margin: 0.5in; }
-  body { background: #fff; color: #000; font-size: 11pt; line-height: 1.35; }
+  body { background: #fff; color: #000; font-size: 11pt; line-height: 1.35; font-family: var(--font); }
 
-  /* optimize typography for black-and-white */
-  .print-root h1 { font-size: 15pt; margin: 0 0 2pt; }
-  .print-root h2 { font-size: 11.5pt; margin: 10pt 0 4pt; border-bottom: 1.5pt solid #000; padding-bottom: 2pt; text-transform: uppercase; letter-spacing: 0.04em; }
+  .print-brandline { display: flex; align-items: center; justify-content: space-between; gap: 12pt; }
+  .print-logo { height: 34pt; width: auto; padding: 8.5pt 0; } /* isolation ≈ 1/4 logo height */
+  .print-store { font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; font-size: 10.5pt; text-align: right; }
+
+  .print-root h1 { font-size: 14pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; margin: 2pt 0; }
+  .print-root h2 { font-size: 11pt; font-weight: 800; margin: 10pt 0 4pt; border-bottom: 1.5pt solid #000; padding-bottom: 2pt; text-transform: uppercase; letter-spacing: 0.05em; }
   .print-header { border-bottom: 2.5pt solid #000; padding-bottom: 6pt; }
   .print-advisor-line { margin: 4pt 0 0; }
 
   .print-checklist { list-style: none; margin: 4pt 0; padding: 0; }
   .print-row { display: flex; align-items: baseline; gap: 6pt; padding: 2.5pt 0; }
   .print-box { width: 9pt; height: 9pt; border: 1.2pt solid #000; display: inline-block; flex: none; transform: translateY(1pt); }
-  .print-price { margin-left: auto; font-family: var(--mono); }
+  .print-price { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
   .print-verify { font-size: 9.5pt; margin: 4pt 0 0; }
 
   /* avoid row breaks inside maintenance groups */

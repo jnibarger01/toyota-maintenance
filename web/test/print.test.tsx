@@ -32,6 +32,8 @@ describe("print sheet content", () => {
     const { container } = render(<PrintSheet result={lookupResult} />);
     const text = container.textContent ?? "";
 
+    expect(text).toContain("Hendrick Toyota Merriam");      // dealership branding
+    expect(screen.getByAltText("Hendrick Automotive Group™")).toBeInTheDocument();
     expect(text).toContain("Service Department");           // dealership/advisor header placeholder
     expect(text).toContain("Advisor:");
     expect(text).toContain("2020 TOYOTA 4RUNNER SR5");      // vehicle
