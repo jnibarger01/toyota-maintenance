@@ -14,7 +14,7 @@
     "api": "npm run build -w server && node server/dist/index.js",
     "dev:api": "npm run dev -w server",
     "dev:web": "npm run dev -w web",
-    "test": "npm run build -w etl && npm run test -w etl && npm run test -w server",
+    "test": "npm run build -w etl && npm run test -w etl && npm run test -w server && npm run test -w web",
     "build": "npm run build -w etl && npm run build -w server && npm run build -w web"
   },
   "engines": {

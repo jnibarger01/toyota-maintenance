@@ -138,7 +138,7 @@ sheet. The UI keeps no persistent state (no localStorage, no cookies).
 ## Tests
 
 ```bash
-npm test        # 81 tests: etl 20 (incl. schema guarantees), server 61
+npm test        # 91 tests: etl 20 (incl. schema guarantees), server 61, web 10
 ```
 
 Coverage includes the required cases: **2020 4Runner SR5 4WD at ~70,000 mi** (7 Normal items, 14
@@ -154,6 +154,7 @@ you want one to poke at).
 ```
 etl/      schema.sql (v0.2), lib.ts (parsers, fail-closed), build-db.ts (streaming JSONL → SQLite)
 server/   milestones.ts + intervals.ts (pure math), maintenance.ts (lookup service), grid.ts, guide.ts, queries.ts, app.ts
+web/      React cockpit: Year -> Model -> Details -> Results (Grid | List | Guide tabs) + print sheet
 web/      React cockpit (VehicleForm, MilestoneRail, Grid/List/Guide views, PrintSheet)
 fixtures/ 2020 4Runner artifact slice (JSONL) used by the test suite
 scripts/  make_fixtures.py — regenerate the fixture slice from full artifacts

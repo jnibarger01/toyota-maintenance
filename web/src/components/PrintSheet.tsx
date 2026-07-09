@@ -1,89 +1,89 @@
-/**
- * Customer sheet. Rendered twice: once inside the Print tab as an on-screen
- * preview, and once hidden at the document root (.print-root) which is the
- * only element visible under @media print.
- *
- * Constraint honored: no pricing anywhere — the sheet says so explicitly and
- * points to the dealership service menu.
- */
-import { fmtMiles, shortHash, type DueResponse } from "../api";
+import type { LookupResult } from "../api";
+import { dollars } from "../api";
 
-export function PrintSheet({ due }: { due: DueResponse }) {
-  const v = due.vehicle;
-  const m = due.mileage;
-  const today = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-  const p = due.provenance;
+/**
+ * Print-friendly customer sheet. Rendered off-screen; @media print shows ONLY this.
+ *
+ * Hard content rules (tested):
+ *  - no raw JSON, no op codes, no labor hours, no internal notes
+ *  - no full config key / schedule hash — a short schedule reference only
+ *  - prices appear only when the dealership menu maps them explicitly
+ *  - black-and-white friendly, one page where the schedule allows
+ */
+export function PrintSheet({ result }: { result: LookupResult }) {
+  const v = result.vehicle;
+  const m = result.mileage;
+  const fmt = (n: number | null) => (n === null ? "—" : n.toLocaleString("en-US"));
+  const shortRef = `${result.source.config_key.slice(0, 10)} / ${result.source.schedule_hash.slice(0, 10)}`;
 
   return (
-    <div className="print-sheet">
-      <div className="ps-header">
-        <div className="ps-dealer">Hendrick Toyota Merriam — Service</div>
-        <div className="ps-doc">
-          Factory maintenance recommendation
-          <br />
-          Prepared {today}
-        </div>
-      </div>
+    <section className="print-root" aria-hidden="true">
+      <header className="print-header avoid-break">
+        {/* Dealership / advisor header placeholder — replace with letterhead in production. */}
+        <h1>Service Department · Maintenance Review</h1>
+        <p className="print-advisor-line">Advisor: ____________________&nbsp;&nbsp;&nbsp;Date: ______________</p>
+      </header>
 
-      <div className="ps-vehicle">
-        <div>
-          <div className="ps-vname">
-            {v.year} {v.make} {v.model} {v.trim}
-          </div>
-          <div className="ps-vmeta" style={{ textAlign: "left" }}>
-            {v.engine} · {v.drivetrain} · {v.transmission} · {v.driving_condition} driving schedule
-          </div>
-        </div>
-        <div className="ps-vmeta">
-          Odometer: {fmtMiles(m.entered)} mi
-          <br />
-          Service interval: {fmtMiles(m.snapped_milestone)} mi
-        </div>
-      </div>
-
-      {m.extrapolated && (
-        <p style={{ fontSize: 11 }}>
-          <strong>Note:</strong> this odometer reading is beyond the last published milestone
-          ({fmtMiles(m.grid_max)} mi); recommendations repeat the factory cycle at the{" "}
-          {fmtMiles(m.cycle_mileage)}-mile point. Your advisor will confirm against service history.
+      <section className="print-vehicle avoid-break">
+        <h2>Vehicle</h2>
+        <p>
+          {v.year} {v.make} {v.model}{v.trim ? ` ${v.trim}` : ""} · {v.engine ?? "—"} · {v.drivetrain ?? "—"} · {v.transmission ?? "—"}
         </p>
-      )}
+        <p>
+          Odometer: <strong>{fmt(m.current)} miles</strong>
+          &nbsp;·&nbsp; Driving condition: <strong>{v.driving_condition}</strong>
+        </p>
+      </section>
 
-      <div className="ps-section-title">
-        Recommended at {fmtMiles(due.due_now.milestone)} miles — {due.due_now.items.length} items
-      </div>
-      <ul className="ps-check">
-        {due.due_now.items.map((it) => (
-          <li key={it.service_name}>
-            <span className="box" aria-hidden="true" />
-            <span>{it.service_name}</span>
-            {it.category && <span className="cat">{it.category}</span>}
-          </li>
-        ))}
-        {due.due_now.items.length === 0 && <li>No factory items at this exact milestone.</li>}
-      </ul>
+      <section className="print-group avoid-break">
+        <h2>{m.current_interval !== null ? `Due at ${fmt(m.current_interval)} miles` : "Scheduled maintenance"}</h2>
+        {m.current_interval !== null && result.due_now.length > 0 ? (
+          <ul className="print-checklist">
+            {result.due_now.map((t) => (
+              <li key={t.task_key} className="print-row">
+                <span className="print-box" aria-hidden="true" />
+                <span className="print-task">
+                  {t.task_name}
+                  {t.advisor_label ? ` (${t.advisor_label})` : ""}
+                </span>
+                {t.menu_price_cents !== null ? <span className="print-price">{dollars(t.menu_price_cents)}</span> : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No factory interval reached yet — first scheduled service at {fmt(m.next_interval)} miles.</p>
+        )}
+        {result.overdue.length > 0 ? (
+          <p className="print-verify">
+            Verify against service history ({fmt(m.previous_interval)}-mile items):{" "}
+            {result.overdue.map((t) => t.task_name).join("; ")}.
+          </p>
+        ) : null}
+      </section>
 
-      <div className="ps-next">
-        <strong>Your next visit:</strong> {fmtMiles(due.next.milestone)}-mile service,{" "}
-        {fmtMiles(due.next.miles_away)} miles from today
-        {due.next.est_months_away !== null &&
-          ` (about ${due.next.est_months_away} month${due.next.est_months_away === 1 ? "" : "s"} at your driving pace)`}
-        . {due.next.items.length} scheduled items.
-      </div>
+      <section className="print-group avoid-break">
+        <h2>Next service milestone</h2>
+        <p>
+          {m.next_interval !== null
+            ? `${fmt(m.next_interval)} miles` +
+              (result.estimate.months_to_next !== null
+                ? ` — about ${result.estimate.months_to_next} month${result.estimate.months_to_next === 1 ? "" : "s"} at your current pace` +
+                  (result.estimate.next_due_date ? ` (around ${result.estimate.next_due_date})` : "")
+                : "")
+            : "Past the last published interval — your advisor will schedule from service history."}
+        </p>
+      </section>
 
-      <div className="ps-foot">
-        Source: {p.source} factory maintenance schedule · schedule {shortHash(p.schedule_key)} ·
-        content hash {shortHash(p.schedule_hash)} · schedule updated {p.last_updated ?? "—"} ·
-        lookup database built {p.db_built_at ?? "—"}
-        <br />
-        Pricing is not shown on this sheet — please see the dealership service menu or your advisor
-        for current pricing. This sheet reflects the factory {v.driving_condition.toLowerCase()}
-        -condition schedule for the vehicle configuration listed above and is not a repair order.
-      </div>
-    </div>
+      <section className="print-group avoid-break print-notes">
+        <h2>Advisor notes</h2>
+        <div className="print-note-line" />
+        <div className="print-note-line" />
+        <div className="print-note-line" />
+      </section>
+
+      <footer className="print-footer">
+        Source: {result.source.source} factory maintenance schedule · Schedule ref {shortRef} · No pricing implied unless shown.
+      </footer>
+    </section>
   );
 }
