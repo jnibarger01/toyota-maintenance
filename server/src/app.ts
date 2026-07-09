@@ -84,7 +84,9 @@ function parseLookupBody(b: Record<string, unknown>): MaintenanceLookupInput {
     engineSize: optStr(b["engineSize"]),
     drivetrain: optStr(b["drivetrain"]),
     transmission: optStr(b["transmission"]),
-    drivingCondition: parseCondition(b["drivingCondition"]),
+    // N1: no silent Normal default — severe-service customers must not be
+    // under-recommended because a caller forgot the field.
+    drivingCondition: parseCondition(b["drivingCondition"]) ?? bad("drivingCondition is required (Normal or Severe)"),
     currentMileage: mileage,
     avgMonthlyMileage: avgMonthly,
     overdueThresholdMiles: threshold,
@@ -186,7 +188,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       engineSize: optStr(q["engineSize"]) ?? optStr(q["engine_size"]),
       drivetrain: optStr(q["drivetrain"]),
       transmission: optStr(q["transmission"]),
-      drivingCondition: parseCondition(q["drivingCondition"] ?? q["driving_condition"]),
+      drivingCondition:
+        parseCondition(q["drivingCondition"] ?? q["driving_condition"]) ?? bad("drivingCondition is required (Normal or Severe)"),
       currentMileage: mileage,
       overdueThresholdMiles: DEFAULT_OVERDUE_THRESHOLD,
     };

@@ -431,6 +431,18 @@ export class Lookup {
        FROM schedule_task_edges e
        JOIN maintenance_tasks mt USING (task_key)
        WHERE e.config_key = ? AND mt.interval_miles IS NOT NULL
+         -- B1 dedupe (display layer only): the source data sometimes carries the
+         -- same line under two service_ids; both task rows stay in the DB, but
+         -- customer-visible output keeps exactly one row per (task_name,
+         -- interval_miles) — the MIN(task_key) as the stable representative.
+         AND mt.task_key = (
+           SELECT MIN(mt2.task_key)
+           FROM schedule_task_edges e2
+           JOIN maintenance_tasks mt2 USING (task_key)
+           WHERE e2.config_key = e.config_key
+             AND mt2.task_name = mt.task_name
+             AND mt2.interval_miles = mt.interval_miles
+         )
        ORDER BY mt.interval_miles, mt.task_name`
     ).all(configKey) as TaskIntervalRow[];
   }

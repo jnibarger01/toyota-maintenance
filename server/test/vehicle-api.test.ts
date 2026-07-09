@@ -235,6 +235,13 @@ describe("POST /api/maintenance/lookup", () => {
   it("validates input: 400s and a 404, never a 500", async () => {
     expect((await post("/api/maintenance/lookup", { year: 2020, model: "4RUNNER" })).status).toBe(400);
     expect((await post("/api/maintenance/lookup", { ...LOOKUP, drivingCondition: "Sport" })).status).toBe(400);
+    // N1: no silent Normal default — omitting the condition is a 400, not a guess.
+    const { drivingCondition: _omit, ...noCondition } = LOOKUP;
+    const missing = await post("/api/maintenance/lookup", noCondition);
+    expect(missing.status).toBe(400);
+    expect(JSON.stringify(missing.body)).toContain("drivingCondition is required");
+    expect((await post("/api/maintenance/lookup", { ...LOOKUP, drivingCondition: "Normal" })).status).toBe(200);
+    expect((await post("/api/maintenance/lookup", { ...LOOKUP, drivingCondition: "Severe" })).status).toBe(200);
     expect((await post("/api/maintenance/lookup", { ...LOOKUP, avgMonthlyMileage: 99999 })).status).toBe(400);
     expect((await post("/api/maintenance/lookup", { ...LOOKUP, model: "NOPE" })).status).toBe(404);
   });

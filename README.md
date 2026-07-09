@@ -189,7 +189,7 @@ but applied.
 ## Tests
 
 ```bash
-npm test        # 114 tests: etl 40 (incl. sync + mapping engine), server 64, web 10
+npm test        # 122 tests: etl 40, server 68 (incl. dedupe regression), web 14 (incl. Airtable guard)
 ```
 
 Coverage includes the required cases: **2020 4Runner SR5 4WD at ~70,000 mi** (7 Normal items, 14
