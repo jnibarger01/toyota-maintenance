@@ -89,6 +89,8 @@ surface them honestly as `schedule_empty` instead of failing or fabricating inte
 | `/api/models?year=` | distinct models for a year |
 | `/api/configs?year=&model=&trim=&engine=&engine_size=&drivetrain=&transmission=&driving_condition=` | matching configs (partial filters OK, empty → `[]`, capped at 500 with `truncated` flag); `engine` accepts a type (`V6`) or the full string (`V6 4.0L`); text matches are case-insensitive |
 | `POST /api/maintenance/lookup` | task-graph maintenance lookup (see below) — a read-only query despite the verb |
+| `GET /api/maintenance/grid?…&currentMileage=` | advisor grid: 2 intervals before current, current (flagged), 3 after; rows collapsed by display name with per-interval drilldown `details`; category blocks ordered oil → rotation → filters → brakes → fluids → drivetrain → inspections; `advisor_label`/`display_category` overlay from `service_task_mappings` when mapped |
+| `POST /api/maintenance/guide` | seven-section advisor guide from the same lookup body: vehicle summary, due now, why it matters, next visit, driving-condition notes, source/provenance, and an `internal: true` section (op codes, labor hours, prices, overdue-verify list). Toyota task names stay visible; "required" wording appears only when the task priority says so; Severe-only items are labeled via a live Normal↔Severe delta; no raw JSON in any section |
 | `/api/options?year=&model=&…` | distinct values per selector dimension under the current partial filter, plus `matching_schedules` — powers the cascading form |
 | `/api/schedules/resolve?…` | filters → matching schedule rows (404 if none; UI requires exactly 1) |
 | `/api/schedules/:key` | vehicle + full milestone grid + every item + provenance (feeds the Grid tab) |
@@ -136,7 +138,7 @@ sheet. The UI keeps no persistent state (no localStorage, no cookies).
 ## Tests
 
 ```bash
-npm test        # 69 tests: etl 20 (incl. schema guarantees), server 49
+npm test        # 81 tests: etl 20 (incl. schema guarantees), server 61
 ```
 
 Coverage includes the required cases: **2020 4Runner SR5 4WD at ~70,000 mi** (7 Normal items, 14
@@ -151,7 +153,7 @@ you want one to poke at).
 
 ```
 etl/      schema.sql (v0.2), lib.ts (parsers, fail-closed), build-db.ts (streaming JSONL → SQLite)
-server/   milestones.ts + intervals.ts (pure interval math), queries.ts (read-only lookup), app.ts (Fastify)
+server/   milestones.ts + intervals.ts (pure math), maintenance.ts (lookup service), grid.ts, guide.ts, queries.ts, app.ts
 web/      React cockpit (VehicleForm, MilestoneRail, Grid/List/Guide views, PrintSheet)
 fixtures/ 2020 4Runner artifact slice (JSONL) used by the test suite
 scripts/  make_fixtures.py — regenerate the fixture slice from full artifacts

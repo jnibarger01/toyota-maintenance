@@ -91,8 +91,15 @@ export interface TaskIntervalRow {
   category: string | null;
   priority: string | null;
   menu: string | null;
+  service_id: string | null;
   interval_miles: number;
+  /* Dealership-owned mapping fields — null unless service_task_mappings has them. */
   menu_price_cents: number | null;
+  advisor_label: string | null;
+  op_code: string | null;
+  labor_hours: number | null;
+  display_category: string | null;
+  customer_visible: number | null; // null = unmapped = visible
 }
 
 export interface BestConfig {
@@ -408,11 +415,19 @@ export class Lookup {
    * an explicit menu_price_cents for the task name (dealership-owned data).
    */
   taskIntervals(configKey: string): TaskIntervalRow[] {
+    // Scalar subqueries (first mapping row wins, by id) so mapping rows can
+    // never multiply task rows. All mapping fields are dealership-owned.
+    const map = (col: string, extra = "") =>
+      `(SELECT m.${col} FROM service_task_mappings m
+         WHERE m.source_task_name = mt.task_name ${extra} ORDER BY m.id LIMIT 1)`;
     return this.db.prepare(
-      `SELECT mt.task_key, mt.task_name, mt.category, mt.priority, mt.menu, mt.interval_miles,
-              (SELECT m.menu_price_cents FROM service_task_mappings m
-                WHERE m.source_task_name = mt.task_name AND m.menu_price_cents IS NOT NULL
-                ORDER BY m.id LIMIT 1) AS menu_price_cents
+      `SELECT mt.task_key, mt.task_name, mt.category, mt.priority, mt.menu, mt.service_id, mt.interval_miles,
+              ${map("menu_price_cents", "AND m.menu_price_cents IS NOT NULL")} AS menu_price_cents,
+              ${map("advisor_label", "AND m.advisor_label IS NOT NULL")}       AS advisor_label,
+              ${map("op_code", "AND m.op_code IS NOT NULL")}                   AS op_code,
+              ${map("labor_hours", "AND m.labor_hours IS NOT NULL")}           AS labor_hours,
+              ${map("display_category", "AND m.display_category IS NOT NULL")} AS display_category,
+              ${map("is_customer_visible")}                                    AS customer_visible
        FROM schedule_task_edges e
        JOIN maintenance_tasks mt USING (task_key)
        WHERE e.config_key = ? AND mt.interval_miles IS NOT NULL

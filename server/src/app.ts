@@ -5,7 +5,9 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import { Lookup, type VehicleFilters, type ConfigFilters } from "./queries.js";
-import { intervalContext, overdueTriggered, estimateNext } from "./intervals.js";
+import { runMaintenanceLookup, resolveConfig, conditionDelta, type MaintenanceLookupInput } from "./maintenance.js";
+import { buildMaintenanceGrid } from "./grid.js";
+import { generateAdvisorGuide } from "./guide.js";
 
 export interface AppOptions {
   dbPath: string;
@@ -45,6 +47,48 @@ function parseCondition(v: unknown): string | undefined {
   if (c === "normal") return "Normal";
   if (c === "severe") return "Severe";
   bad("drivingCondition must be Normal or Severe");
+}
+
+/** Shared body validation for /api/maintenance/lookup and /api/maintenance/guide. */
+function parseLookupBody(b: Record<string, unknown>): MaintenanceLookupInput {
+  const year = parseYear(b["year"], true)!;
+  const model = optStr(b["model"]);
+  if (!model) bad("model is required");
+
+  const mileage = Number(b["currentMileage"]);
+  if (!Number.isInteger(mileage) || mileage < 1 || mileage > MAX_MILEAGE) {
+    bad(`currentMileage must be an integer 1..${MAX_MILEAGE}`);
+  }
+
+  let avgMonthly: number | null = null;
+  if (b["avgMonthlyMileage"] !== undefined && b["avgMonthlyMileage"] !== null && b["avgMonthlyMileage"] !== "") {
+    avgMonthly = Number(b["avgMonthlyMileage"]);
+    if (!Number.isFinite(avgMonthly) || avgMonthly < 0 || avgMonthly > MAX_MONTHLY) {
+      bad(`avgMonthlyMileage must be 0..${MAX_MONTHLY}`);
+    }
+  }
+
+  let threshold = DEFAULT_OVERDUE_THRESHOLD;
+  if (b["overdueThresholdMiles"] !== undefined) {
+    threshold = Number(b["overdueThresholdMiles"]);
+    if (!Number.isInteger(threshold) || threshold < 0 || threshold > MAX_OVERDUE_THRESHOLD) {
+      bad(`overdueThresholdMiles must be an integer 0..${MAX_OVERDUE_THRESHOLD}`);
+    }
+  }
+
+  return {
+    year,
+    model,
+    trim: optStr(b["trim"]),
+    engine: optStr(b["engine"]),
+    engineSize: optStr(b["engineSize"]),
+    drivetrain: optStr(b["drivetrain"]),
+    transmission: optStr(b["transmission"]),
+    drivingCondition: parseCondition(b["drivingCondition"]),
+    currentMileage: mileage,
+    avgMonthlyMileage: avgMonthly,
+    overdueThresholdMiles: threshold,
+  };
 }
 
 function pickFilters(q: Record<string, unknown>): VehicleFilters {
@@ -120,50 +164,36 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   // ---- Maintenance lookup (floor-interval model over task graph) -----------
 
   app.post("/api/maintenance/lookup", async (req, reply) => {
-    const b = (req.body ?? {}) as Record<string, unknown>;
+    const input = parseLookupBody((req.body ?? {}) as Record<string, unknown>);
+    const result = runMaintenanceLookup(lookup, input);
+    if (!result) return reply.code(404).send({ error: "no vehicle configuration matches these selections" });
+    return result;
+  });
 
-    const year = parseYear(b["year"], true)!;
-    const model = optStr(b["model"]);
-    if (!model) bad("model is required");
-
-    const mileage = Number(b["currentMileage"]);
+  // Advisor grid: 2 intervals before current, current, 3 after; rows collapsed
+  // by display name, grouped by category in classic advisor order.
+  app.get("/api/maintenance/grid", async (req, reply) => {
+    const q = req.query as Record<string, unknown>;
+    const mileage = Number(q["currentMileage"]);
     if (!Number.isInteger(mileage) || mileage < 1 || mileage > MAX_MILEAGE) {
       bad(`currentMileage must be an integer 1..${MAX_MILEAGE}`);
     }
-
-    let avgMonthly: number | null = null;
-    if (b["avgMonthlyMileage"] !== undefined && b["avgMonthlyMileage"] !== null && b["avgMonthlyMileage"] !== "") {
-      avgMonthly = Number(b["avgMonthlyMileage"]);
-      if (!Number.isFinite(avgMonthly) || avgMonthly < 0 || avgMonthly > MAX_MONTHLY) {
-        bad(`avgMonthlyMileage must be 0..${MAX_MONTHLY}`);
-      }
-    }
-
-    let threshold = DEFAULT_OVERDUE_THRESHOLD;
-    if (b["overdueThresholdMiles"] !== undefined) {
-      threshold = Number(b["overdueThresholdMiles"]);
-      if (!Number.isInteger(threshold) || threshold < 0 || threshold > MAX_OVERDUE_THRESHOLD) {
-        bad(`overdueThresholdMiles must be an integer 0..${MAX_OVERDUE_THRESHOLD}`);
-      }
-    }
-
-    const best = lookup.resolveBestConfig({
-      year,
-      model,
-      trim: optStr(b["trim"]),
-      engine: optStr(b["engine"]),
-      engine_size: optStr(b["engineSize"]),
-      drivetrain: optStr(b["drivetrain"]),
-      transmission: optStr(b["transmission"]),
-      driving_condition: parseCondition(b["drivingCondition"]),
-    });
+    const input: MaintenanceLookupInput = {
+      year: parseYear(q["year"], true)!,
+      model: optStr(q["model"]) ?? bad("model is required"),
+      trim: optStr(q["trim"]),
+      engine: optStr(q["engine"]),
+      engineSize: optStr(q["engineSize"]) ?? optStr(q["engine_size"]),
+      drivetrain: optStr(q["drivetrain"]),
+      transmission: optStr(q["transmission"]),
+      drivingCondition: parseCondition(q["drivingCondition"] ?? q["driving_condition"]),
+      currentMileage: mileage,
+      overdueThresholdMiles: DEFAULT_OVERDUE_THRESHOLD,
+    };
+    const best = resolveConfig(lookup, input);
     if (!best) return reply.code(404).send({ error: "no vehicle configuration matches these selections" });
 
-    const tasks = lookup.taskIntervals(best.row.config_key);
-    const intervals = [...new Set(tasks.map((t) => t.interval_miles))].sort((a, z) => a - z);
-    const ctx = intervalContext(mileage, intervals);
-    const at = (m: number | null) => (m === null ? [] : tasks.filter((t) => t.interval_miles === m));
-
+    const grid = buildMaintenanceGrid(lookup.taskIntervals(best.row.config_key), mileage);
     return {
       vehicle: best.row,
       resolution: { matched_configs: best.matched_configs, relaxed_fields: best.relaxed_fields },
@@ -173,21 +203,26 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         source: best.row.source,
         schedule_name: best.row.schedule_name,
       },
-      intervals,
       mileage: {
         current: mileage,
-        current_interval: ctx.current,
-        previous_interval: ctx.previous,
-        next_interval: ctx.next,
-        overdue_threshold_miles: threshold,
+        current_interval: grid.columns.find((c) => c.current)?.mileage ?? null,
       },
-      due_now: at(ctx.current),
-      overdue: overdueTriggered(mileage, ctx.previous, threshold) ? at(ctx.previous) : [],
-      upcoming: at(ctx.next),
-      estimate: {
-        avg_monthly_mileage: avgMonthly,
-        ...estimateNext(mileage, ctx.next, avgMonthly),
-      },
+      columns: grid.columns,
+      rows: grid.rows,
+    };
+  });
+
+  // Advisor guide: the lookup narrated in seven sections (last one internal-only).
+  app.post("/api/maintenance/guide", async (req, reply) => {
+    const input = parseLookupBody((req.body ?? {}) as Record<string, unknown>);
+    const result = runMaintenanceLookup(lookup, input);
+    if (!result) return reply.code(404).send({ error: "no vehicle configuration matches these selections" });
+    const delta = conditionDelta(lookup, input, result);
+    return {
+      vehicle: result.vehicle,
+      resolution: result.resolution,
+      source: result.source,
+      guide: generateAdvisorGuide(result, delta),
     };
   });
 
