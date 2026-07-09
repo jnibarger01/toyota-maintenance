@@ -28,6 +28,7 @@
 import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
 import { createReadStream, readFileSync, existsSync, mkdirSync, rmSync, openSync, readSync, closeSync } from "node:fs";
+import { ensureSyncSchema } from "./airtable/sync-schema.js";
 import { createInterface } from "node:readline";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -107,6 +108,7 @@ async function main(): Promise<void> {
   db.pragma("journal_mode = MEMORY");
   db.pragma("synchronous = OFF");
   db.exec(readFileSync(join(__dirname, "schema.sql"), "utf8"));
+  ensureSyncSchema(db); // Airtable admin-sync layer (mirror + log tables)
   db.pragma("foreign_keys = ON");
 
   const errors: string[] = [];

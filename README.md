@@ -135,10 +135,39 @@ Automatic). Tabs:
 Extrapolated readings and empty source schedules are disclosed on-screen and on the printed
 sheet. The UI keeps no persistent state (no localStorage, no cookies).
 
+## Airtable admin sync (backend/CLI only)
+
+Airtable is the **admin/editing layer**; SQLite is the **live lookup backend**. The customer
+lookup API never calls Airtable, holds no token, and keeps serving from SQLite when Airtable is
+down — enforced by tests (`server/test/no-airtable.test.ts`), not convention.
+
+```
+cp .env.example .env                       # fill AIRTABLE_TOKEN + AIRTABLE_BASE_ID (never committed)
+npm run sync:airtable -- --dry-run         # fetch + validate + report; writes nothing (not even schema)
+npm run sync:airtable -- --apply           # transactional upserts by schedule_key + sync-log row
+npm run sync:airtable -- --verify          # read-only health checks; needs no Airtable env
+```
+
+Behavior: offset pagination until exhausted; schedule_key from an explicit
+`schedule_key`/`config_key` field first, else parsed from Description (labeled line, then any
+40-hex token); records without a key are warned + skipped, never fatal; duplicate keys update
+the existing row (later record wins); Airtable `record_id` is preserved on every row; 429s are
+retried with bounded backoff honoring `Retry-After`, transient 5xx retried; the token is
+redacted from every error, log line, report, and CLI echo. Optional tables
+(`AIRTABLE_MAINTENANCE_TASKS_TABLE`, `AIRTABLE_SERVICE_MAPPING_TABLE`) are mirrored verbatim
+into `airtable_tasks_raw` / `airtable_service_mappings_raw` when reachable and skipped with a
+warning when not — the schedules sync always completes. Promotion of mirrored pricing rows into
+the dealership-owned `service_task_mappings` table is a deliberate, separate step (not automatic).
+
+Tables: `maintenance_schedules` (mirror, unique `schedule_key`) and `airtable_sync_log`
+(run_id, mode, status, counts, redacted warnings/errors). Fresh artifact builds include them;
+`--apply` also creates them on an existing DB. **Caveat:** an artifact rebuild produces a new
+DB file — re-run `sync:airtable --apply` after promoting a rebuilt database.
+
 ## Tests
 
 ```bash
-npm test        # 91 tests: etl 20 (incl. schema guarantees), server 61, web 10
+npm test        # 107 tests: etl 33 (incl. Airtable sync), server 64, web 10
 ```
 
 Coverage includes the required cases: **2020 4Runner SR5 4WD at ~70,000 mi** (7 Normal items, 14

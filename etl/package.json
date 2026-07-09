@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json && cp src/schema.sql dist/schema.sql",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sync:airtable": "node dist/sync-airtable.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0"
