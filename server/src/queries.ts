@@ -54,6 +54,56 @@ const SCHEDULE_ROW_COLS = `config_key AS schedule_key, schedule_hash, year, make
   engine, engine_type, engine_size, engine_variant, drivetrain, transmission,
   driving_condition, schedule_name, source, last_updated`;
 
+/** Row shape for the vehicle-selection endpoints: config_key exposed by its real name. */
+export interface ConfigRow {
+  config_key: string;
+  schedule_hash: string;
+  year: number;
+  make: string;
+  model: string;
+  trim: string | null;
+  engine: string | null;
+  engine_type: string | null;
+  engine_size: string | null;
+  engine_variant: string | null;
+  drivetrain: string | null;
+  transmission: string | null;
+  driving_condition: string;
+  schedule_name: string | null;
+  source: string;
+}
+
+/** Filters for /api/configs and lookup resolution. `engine` matches engine_type OR the full string. */
+export interface ConfigFilters {
+  year?: number;
+  model?: string;
+  trim?: string;
+  engine?: string;
+  engine_size?: string;
+  drivetrain?: string;
+  transmission?: string;
+  driving_condition?: string;
+}
+
+export interface TaskIntervalRow {
+  task_key: string;
+  task_name: string;
+  category: string | null;
+  priority: string | null;
+  menu: string | null;
+  interval_miles: number;
+  menu_price_cents: number | null;
+}
+
+export interface BestConfig {
+  row: ConfigRow;
+  matched_configs: number;
+  relaxed_fields: string[];
+}
+
+const CONFIG_ROW_COLS = `config_key, schedule_hash, year, make, model, trim, engine, engine_type,
+  engine_size, engine_variant, drivetrain, transmission, driving_condition, schedule_name, source`;
+
 const FILTER_COLS: Array<[keyof VehicleFilters, string]> = [
   ["year", "year"],
   ["model", "model"],
@@ -273,5 +323,100 @@ export class Lookup {
       condition_comparison: conditionComparison,
       provenance: this.provenance(scheduleKey),
     };
+  }
+
+  // ------------------------------------------------------------------------
+  // Vehicle-selection endpoints (read-only, SQLite only — never Airtable).
+  // ------------------------------------------------------------------------
+
+  /** Distinct years, newest first. Blank/NULL filtered. */
+  years(): number[] {
+    return (this.db.prepare(
+      "SELECT DISTINCT year FROM vehicle_configs WHERE year IS NOT NULL ORDER BY year DESC"
+    ).all() as Array<{ year: number }>).map((r) => r.year);
+  }
+
+  /** Distinct models for a year, alphabetical. */
+  modelsForYear(year: number): string[] {
+    return (this.db.prepare(
+      `SELECT DISTINCT model FROM vehicle_configs
+       WHERE year = ? AND model IS NOT NULL AND TRIM(model) <> ''
+       ORDER BY model`
+    ).all(year) as Array<{ model: string }>).map((r) => r.model);
+  }
+
+  private configWhere(f: ConfigFilters): { sql: string; params: unknown[] } {
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (f.year !== undefined) { conds.push("year = ?"); params.push(f.year); }
+    for (const col of ["model", "trim", "engine_size", "drivetrain", "transmission"] as const) {
+      const v = f[col];
+      if (v !== undefined && v !== "") { conds.push(`${col} = ? COLLATE NOCASE`); params.push(v); }
+    }
+    if (f.engine !== undefined && f.engine !== "") {
+      // Accept an engine type ("V6") or the full engine string ("V6 4.0L").
+      conds.push("(engine_type = ? COLLATE NOCASE OR engine = ? COLLATE NOCASE)");
+      params.push(f.engine, f.engine);
+    }
+    if (f.driving_condition !== undefined && f.driving_condition !== "") {
+      conds.push("driving_condition = ?"); params.push(f.driving_condition);
+    }
+    return { sql: conds.length ? "WHERE " + conds.join(" AND ") : "", params };
+  }
+
+  /** Matching configs for partial filters. Empty match -> empty array, never a throw. */
+  configsList(f: ConfigFilters): ConfigRow[] {
+    const { sql, params } = this.configWhere(f);
+    return this.db.prepare(
+      `SELECT ${CONFIG_ROW_COLS} FROM vehicle_configs ${sql}
+       ORDER BY year DESC, model, trim, driving_condition, config_key`
+    ).all(...params) as ConfigRow[];
+  }
+
+  /**
+   * Resolve the best config for a lookup request.
+   * Hard filters (never relaxed): year, model, drivetrain, driving_condition.
+   * Soft filters relaxed in order until something matches: trim, engine_size, engine, transmission.
+   * Deterministic pick: Normal before Severe, then trim, then config_key.
+   */
+  resolveBestConfig(f: ConfigFilters): BestConfig | null {
+    const softOrder: Array<keyof ConfigFilters> = ["trim", "engine_size", "engine", "transmission"];
+    const relaxed: string[] = [];
+    const attempt: ConfigFilters = { ...f };
+    for (let step = 0; step <= softOrder.length; step++) {
+      const rows = this.configsList(attempt);
+      if (rows.length > 0) {
+        rows.sort((a, b) =>
+          a.driving_condition.localeCompare(b.driving_condition) ||
+          (a.trim ?? "").localeCompare(b.trim ?? "") ||
+          a.config_key.localeCompare(b.config_key));
+        return { row: rows[0], matched_configs: rows.length, relaxed_fields: relaxed };
+      }
+      if (step === softOrder.length) break;
+      const field = softOrder[step];
+      if (attempt[field] !== undefined) {
+        delete attempt[field];
+        relaxed.push(field);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Linked maintenance tasks for a config via schedule_task_edges, with each
+   * task's interval_miles. Price appears ONLY when service_task_mappings has
+   * an explicit menu_price_cents for the task name (dealership-owned data).
+   */
+  taskIntervals(configKey: string): TaskIntervalRow[] {
+    return this.db.prepare(
+      `SELECT mt.task_key, mt.task_name, mt.category, mt.priority, mt.menu, mt.interval_miles,
+              (SELECT m.menu_price_cents FROM service_task_mappings m
+                WHERE m.source_task_name = mt.task_name AND m.menu_price_cents IS NOT NULL
+                ORDER BY m.id LIMIT 1) AS menu_price_cents
+       FROM schedule_task_edges e
+       JOIN maintenance_tasks mt USING (task_key)
+       WHERE e.config_key = ? AND mt.interval_miles IS NOT NULL
+       ORDER BY mt.interval_miles, mt.task_name`
+    ).all(configKey) as TaskIntervalRow[];
   }
 }

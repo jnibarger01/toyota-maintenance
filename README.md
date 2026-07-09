@@ -85,12 +85,31 @@ surface them honestly as `schedule_empty` instead of failing or fabricating inte
 | Route | Purpose |
 | --- | --- |
 | `/api/health` | build metadata + row counts |
+| `/api/years` | distinct years, newest first |
+| `/api/models?year=` | distinct models for a year |
+| `/api/configs?year=&model=&trim=&engine=&engine_size=&drivetrain=&transmission=&driving_condition=` | matching configs (partial filters OK, empty → `[]`, capped at 500 with `truncated` flag); `engine` accepts a type (`V6`) or the full string (`V6 4.0L`); text matches are case-insensitive |
+| `POST /api/maintenance/lookup` | task-graph maintenance lookup (see below) — a read-only query despite the verb |
 | `/api/options?year=&model=&…` | distinct values per selector dimension under the current partial filter, plus `matching_schedules` — powers the cascading form |
 | `/api/schedules/resolve?…` | filters → matching schedule rows (404 if none; UI requires exactly 1) |
 | `/api/schedules/:key` | vehicle + full milestone grid + every item + provenance (feeds the Grid tab) |
 | `/api/schedules/:key/due?mileage=&monthly_miles=` | the cockpit payload: snapped due-now milestone + items, next milestone (+ est. months if monthly miles given), 5 nearby milestones, Normal↔Severe delta at this milestone, provenance |
 
-Milestone math (tested): snap to nearest grid point, **ties round up** (72,500 → 75,000);
+**`POST /api/maintenance/lookup`** takes `{year, model, trim?, engine?, engineSize?, drivetrain?,
+transmission?, drivingCondition?, currentMileage, avgMonthlyMileage?, overdueThresholdMiles?}` and
+resolves the **best** config: year/model/drivetrain/drivingCondition are hard filters; trim →
+engineSize → engine → transmission are relaxed in that order until something matches, and every
+relaxation is reported in `resolution.relaxed_fields` (never silent). It then groups the config's
+linked `maintenance_tasks` by `interval_miles` — verified to mirror the milestone grid exactly —
+and applies a **floor** model: `current_interval` = greatest interval ≤ mileage, `next_interval`
+= smallest above, `due_now` = tasks at current, `upcoming` = tasks at next, `overdue` = tasks at
+the *previous* interval once mileage exceeds it by `overdueThresholdMiles` (default 1,000; env
+`TMC_OVERDUE_THRESHOLD_MILES`). `estimate` projects months/date to the next interval from
+`avgMonthlyMileage`. Per-task `menu_price_cents` is `null` unless `service_task_mappings` has an
+explicit dealership price. No cycle wrap here (above the final interval, `next` is `null`), and a
+`--skip-edges` build returns empty intervals for this endpoint.
+
+Milestone math on `/api/schedules/:key/due` (tested): snap to nearest grid point, **ties round
+up** (72,500 → 75,000);
 odometer past the published grid wraps the cycle (190,000 on a 120,000 grid ≡ 70,000) and is
 flagged `extrapolated`; readings below the first milestone clamp up to it.
 
@@ -117,7 +136,7 @@ sheet. The UI keeps no persistent state (no localStorage, no cookies).
 ## Tests
 
 ```bash
-npm test        # 46 tests: etl 20 (incl. schema guarantees), server 26
+npm test        # 69 tests: etl 20 (incl. schema guarantees), server 49
 ```
 
 Coverage includes the required cases: **2020 4Runner SR5 4WD at ~70,000 mi** (7 Normal items, 14
@@ -132,7 +151,7 @@ you want one to poke at).
 
 ```
 etl/      schema.sql (v0.2), lib.ts (parsers, fail-closed), build-db.ts (streaming JSONL → SQLite)
-server/   milestones.ts (pure interval math), queries.ts (read-only lookup), app.ts (Fastify)
+server/   milestones.ts + intervals.ts (pure interval math), queries.ts (read-only lookup), app.ts (Fastify)
 web/      React cockpit (VehicleForm, MilestoneRail, Grid/List/Guide views, PrintSheet)
 fixtures/ 2020 4Runner artifact slice (JSONL) used by the test suite
 scripts/  make_fixtures.py — regenerate the fixture slice from full artifacts
