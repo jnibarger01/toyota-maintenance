@@ -49,6 +49,7 @@ describe("lookup result render", () => {
     expect(within(table).getByText("Replace engine oil and oil filter")).toBeInTheDocument();
     expect(within(table).getByText("Oil & Consumables")).toBeInTheDocument(); // category group row
     expect(within(table).getByText("TIRE ROT")).toBeInTheDocument(); // advisor label overlay
+    expect(within(table).getByText("Rotate tires")).toBeInTheDocument(); // raw Xtime name remains visible
   });
 
   it("list tab shows due/verify/upcoming groups; guide tab lazy-loads sections", async () => {

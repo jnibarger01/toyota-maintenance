@@ -16,7 +16,8 @@
     "dev:web": "npm run dev -w web",
     "test": "npm run build -w etl && npm run test -w etl && npm run test -w server && npm run test -w web",
     "build": "npm run build -w etl && npm run build -w server && npm run build -w web",
-    "sync:airtable": "npm run build -w etl --silent && node etl/dist/sync-airtable.js"
+    "sync:airtable": "npm run build -w etl --silent && node etl/dist/sync-airtable.js",
+    "seed:mappings": "npm run build -w etl --silent && node etl/dist/seed-mappings.js"
   },
   "engines": {
     "node": ">=20"

@@ -164,10 +164,32 @@ Tables: `maintenance_schedules` (mirror, unique `schedule_key`) and `airtable_sy
 `--apply` also creates them on an existing DB. **Caveat:** an artifact rebuild produces a new
 DB file — re-run `sync:airtable --apply` after promoting a rebuilt database.
 
+## Service task mapping (dealership-owned overlay)
+
+Maps raw Toyota/Xtime names to advisor labels, categories, op codes, labor hours, and menu
+prices — in `service_task_mappings` only. Raw source tables are never modified (checksum-tested);
+unknown tasks fall back to the raw name at display time. Customer-facing surfaces (list, print
+sheet) lead with the advisor label when present and keep the raw Xtime name visible; the grid
+(detail view) stays raw-primary.
+
+```
+npm run seed:mappings -- --dry-run                    # validate + report; writes nothing
+npm run seed:mappings -- --apply                      # upsert by source_task_name (no duplicates)
+npm run seed:mappings -- --apply --from-airtable-mirror   # promote synced Airtable mapping rows
+```
+
+The committed template (`fixtures/service-task-mappings.seed.json`, 12 tasks) ships with
+`op_code` / `labor_hours` / `menu_price_cents` **null** — pricing enters only through this
+dealership-owned path (edit the file or maintain the mapping table in Airtable and sync).
+Airtable mirror promotion accepts Title Case or snake_case fields; `Menu Price` in dollars is
+converted to cents, `Menu Price Cents` wins when both exist. Rows with bad pricing (negative,
+non-integer cents) are rejected and reported; names that don't match a known task are warned
+but applied.
+
 ## Tests
 
 ```bash
-npm test        # 107 tests: etl 33 (incl. Airtable sync), server 64, web 10
+npm test        # 114 tests: etl 40 (incl. sync + mapping engine), server 64, web 10
 ```
 
 Coverage includes the required cases: **2020 4Runner SR5 4WD at ~70,000 mi** (7 Normal items, 14

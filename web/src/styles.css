@@ -205,3 +205,11 @@ button, input, select { font: inherit; color: inherit; }
   .print-notes .print-note-line { border-bottom: 1pt solid #000; height: 18pt; }
   .print-footer { margin-top: 12pt; padding-top: 5pt; border-top: 1pt solid #000; font-size: 8.5pt; color: #000; }
 }
+
+/* Raw Xtime name shown as detail subtext when an advisor label leads */
+.task-raw {
+  display: block;
+  font-size: 0.72rem;
+  color: rgba(0, 0, 0, 0.55);
+  letter-spacing: 0.01em;
+}

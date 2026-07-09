@@ -1,0 +1,125 @@
+{
+  "_note": "Dealership-owned mapping seed. op_code / labor_hours / menu_price_cents are intentionally null in the committed template \u2014 fill from the store service menu (or sync via the Airtable mirror). Source task names must match Xtime names exactly.",
+  "mappings": [
+    {
+      "source_task_name": "Rotate tires",
+      "advisor_label": "Tire Rotation",
+      "display_category": "Tires",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Document 4-corner tread depths; pair with oil service when due."
+    },
+    {
+      "source_task_name": "Replace engine oil and oil filter",
+      "advisor_label": "Oil & Filter Change",
+      "display_category": "Oil & Filter",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Confirm oil spec by engine; reset maintenance reminder."
+    },
+    {
+      "source_task_name": "Replace engine oil and oil filter (0W-20)",
+      "advisor_label": "Synthetic 0W-20 Oil & Filter Change",
+      "display_category": "Oil & Filter",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "0W-20 synthetic per Toyota spec; reset maintenance reminder."
+    },
+    {
+      "source_task_name": "Replace cabin air filter",
+      "advisor_label": "Cabin Air Filter Replacement",
+      "display_category": "Filters",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Show the old filter to the customer when possible."
+    },
+    {
+      "source_task_name": "Replace engine air filter",
+      "advisor_label": "Engine Air Filter Replacement",
+      "display_category": "Filters",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Show the old filter to the customer when possible."
+    },
+    {
+      "source_task_name": "Inspect brake linings/drums and brake pads/discs",
+      "advisor_label": "Brake Inspection",
+      "display_category": "Brakes",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Record pad/lining measurements on the MPI."
+    },
+    {
+      "source_task_name": "Visually inspect brake linings/drums and brake pads/discs",
+      "advisor_label": "Visual Brake Inspection",
+      "display_category": "Brakes",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Visual check only; recommend measured inspection if wear is suspected."
+    },
+    {
+      "source_task_name": "Inspect and adjust all fluid levels",
+      "advisor_label": "Fluid Level Check & Top-Off",
+      "display_category": "Fluids",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Top off washer, coolant reservoir, brake fluid to spec; note any consumption."
+    },
+    {
+      "source_task_name": "Inspect wiper blades",
+      "advisor_label": "Wiper Blade Inspection",
+      "display_category": "Wipers",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Streaking or chatter -> recommend replacement."
+    },
+    {
+      "source_task_name": "Replace engine coolant",
+      "advisor_label": "Engine Coolant Exchange",
+      "display_category": "Cooling System",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Use Toyota SLLC only; verify no dilution."
+    },
+    {
+      "source_task_name": "Replace engine coolant - Super Long Life",
+      "advisor_label": "SLLC Coolant Exchange",
+      "display_category": "Cooling System",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Super Long Life Coolant service per schedule."
+    },
+    {
+      "source_task_name": "Replace spark plugs",
+      "advisor_label": "Spark Plug Replacement",
+      "display_category": "Tune-Up",
+      "op_code": null,
+      "labor_hours": null,
+      "menu_price_cents": null,
+      "is_customer_visible": 1,
+      "advisor_note": "Use OE iridium plugs; torque to spec."
+    }
+  ]
+}

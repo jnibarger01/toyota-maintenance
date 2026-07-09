@@ -5,8 +5,8 @@ import { EmptyState } from "./States";
 function TaskLine({ t }: { t: LookupTask }) {
   return (
     <li className="task-line">
-      <span className="task-name">{t.task_name}</span>
-      {t.advisor_label ? <span className="advisor-label">{t.advisor_label}</span> : null}
+      <span className="task-name">{t.advisor_label ?? t.task_name}</span>
+      {t.advisor_label ? <span className="task-raw">{t.task_name}</span> : null}
       {t.menu === "Severe" ? <span className="tag tag-severe">Severe-condition</span> : null}
       {t.menu_price_cents !== null ? <span className="task-price">{dollars(t.menu_price_cents)}</span> : null}
     </li>

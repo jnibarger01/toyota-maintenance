@@ -41,7 +41,7 @@ describe("print sheet content", () => {
     expect(text).toContain("Normal");                       // driving condition
     expect(text).toContain("Due at 70,000 miles");          // due-now group
     expect(text).toContain("Replace engine oil and oil filter");
-    expect(text).toContain("Rotate tires (TIRE ROT)");      // Toyota name + advisor label
+    expect(text).toContain("TIRE ROT (Rotate tires)");      // advisor label leads; raw name stays visible
     expect(text).toContain("$29.95");                       // explicitly mapped price only
     expect(text).toContain("Next service milestone");
     expect(text).toContain("75,000 miles");

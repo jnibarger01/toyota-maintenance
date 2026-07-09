@@ -47,8 +47,8 @@ export function PrintSheet({ result }: { result: LookupResult }) {
               <li key={t.task_key} className="print-row">
                 <span className="print-box" aria-hidden="true" />
                 <span className="print-task">
-                  {t.task_name}
-                  {t.advisor_label ? ` (${t.advisor_label})` : ""}
+                  {t.advisor_label ?? t.task_name}
+                  {t.advisor_label ? ` (${t.task_name})` : ""}
                 </span>
                 {t.menu_price_cents !== null ? <span className="print-price">{dollars(t.menu_price_cents)}</span> : null}
               </li>
