@@ -114,12 +114,13 @@ Normal and Severe records for the same physical vehicle therefore share one
 
 ## Verification
 
-Use Node 20 on this machine because `better-sqlite3` is built for that runtime:
+Requires Node 20 or newer. If the local Node major changes, rebuild the native SQLite binding before running tests:
 
 ```bash
-PATH=/home/jacen/.nvm/versions/node/v20.19.0/bin:$PATH npm test
-PATH=/home/jacen/.nvm/versions/node/v20.19.0/bin:$PATH npm run build
-PATH=/home/jacen/.nvm/versions/node/v20.19.0/bin:$PATH npm run vehicle:validate -- --mode sample --data-dir /home/jacen/xtime-toyota-maintenance-export
-PATH=/home/jacen/.nvm/versions/node/v20.19.0/bin:$PATH TMC_DB=/path/to/tmc.db TMC_PORT=8791 npm run dev:api
-PATH=/home/jacen/.nvm/versions/node/v20.19.0/bin:$PATH npm run dev:web
+npm rebuild better-sqlite3
+npm test
+npm run build
+npm run vehicle:validate -- --mode sample --data-dir /path/to/xtime-export
+TMC_DB=/path/to/tmc.db TMC_PORT=8791 npm run dev:api
+npm run dev:web
 ```

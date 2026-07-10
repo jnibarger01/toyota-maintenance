@@ -111,17 +111,17 @@ backward compatible for advisor clients built against the prior shapes.
 
 Authoritative adjacent export:
 
-- `/home/jacen/xtime-toyota-maintenance-export/config_schedules.jsonl`
+- `<xtime-export-dir>/config_schedules.jsonl`
   - 7,222 JSONL rows
   - 645,250,267 bytes
   - model years 2001–2026
   - 20 condition-specific rows referencing the one authentic empty template
-- `/home/jacen/xtime-toyota-maintenance-export/summary.json`
+- `<xtime-export-dir>/summary.json`
   - source-provided 7,222 total and per-year counts
-- `/home/jacen/xtime-toyota-maintenance-export/toyota_maintenance.sqlite`
+- `<xtime-export-dir>/toyota_maintenance.sqlite`
   - 7,202 `vehicle_configs` rows
   - 2,382,942,208 bytes
-- `/home/jacen/xtime-toyota-maintenance-export/unique_schedule_templates.jsonl`
+- `<xtime-export-dir>/unique_schedule_templates.jsonl`
   - 1,764 schedule templates
 
 The 20 source rows absent from the older SQLite database are exactly the 20

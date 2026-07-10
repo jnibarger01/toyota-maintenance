@@ -2,10 +2,10 @@
 
 ## Scope
 
-- Reference: `/home/jacen/.codex/generated_images/019f493a-f598-7882-9529-ad5c4249a6fe/exec-28ea9528-0c40-4585-b137-9bcfa97fb1a0.png`
-- Implementation: `/tmp/toyota-maintenance-cockpit-final-1672x940-v2.png`
-- Full comparison: `/tmp/toyota-maintenance-cockpit-comparison-1672x940-v2.png`
-- Focused grid/inspector comparison: `/tmp/toyota-maintenance-cockpit-comparison-grid-inspector-v2.png`
+- Reference: local design reference image (not committed)
+- Implementation: local final implementation screenshot (not committed)
+- Full comparison: local side-by-side comparison image (not committed)
+- Focused grid/inspector comparison: local focused comparison image (not committed)
 - Compared state: 2020 Toyota 4Runner SR5, V6 4.0L, automatic, 4WD,
   Normal schedule, 70,000 miles, grid view
 - Reference viewport: 1672 × 941

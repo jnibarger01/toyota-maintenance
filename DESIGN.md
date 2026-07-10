@@ -1,7 +1,7 @@
 # Toyota Maintenance Design Contract
 
 ## Source Of Truth
-- Exact reference: `/home/jacen/.codex/generated_images/019f493a-f598-7882-9529-ad5c4249a6fe/exec-28ea9528-0c40-4585-b137-9bcfa97fb1a0.png`.
+- Exact reference: local design reference image used during implementation (not committed).
 - Product purpose: a customer-facing presentation of imported Toyota/Xtime factory maintenance schedule data.
 - The interface may say `Factory schedule` and `Source: Xtime`. It must not claim live Toyota verification or quote an owner's manual unless that source exists in the data.
 
