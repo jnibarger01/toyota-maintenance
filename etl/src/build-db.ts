@@ -25,9 +25,9 @@
  * exists upstream or is introduced here. Pricing belongs exclusively to the
  * dealership-owned service_task_mappings table, which this ETL never writes.
  */
-import Database from "better-sqlite3";
+import Database, { type Database as DB } from "better-sqlite3";
 import { createHash } from "node:crypto";
-import { createReadStream, readFileSync, existsSync, mkdirSync, rmSync, openSync, readSync, closeSync } from "node:fs";
+import { createReadStream, readFileSync, existsSync, mkdirSync, rmSync, openSync, readSync, closeSync, renameSync } from "node:fs";
 import { ensureSyncSchema } from "./airtable/sync-schema.js";
 import { createInterface } from "node:readline";
 import { resolve, dirname, join } from "node:path";
@@ -64,6 +64,82 @@ async function* lines(path: string): AsyncGenerator<string> {
 
 interface FileFacts { sha256: string; byteCount: number; lineCount: number }
 
+function cleanupDbFiles(path: string): void {
+  for (const suffix of ["", "-wal", "-shm"]) rmSync(path + suffix, { force: true });
+}
+
+function failClosedMessage(errors: string[]): string {
+  return `FAIL-CLOSED: ${errors.length} integrity error(s):\n` + errors.map((e) => `  ${e}`).join("\n");
+}
+
+function validateDatabase(dbPath: string): void {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const one = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
+    const requiredTables = [
+      "schedule_templates",
+      "schedule_items",
+      "vehicle_configs",
+      "maintenance_tasks",
+      "schedule_task_edges",
+      "artifact_files",
+      "import_meta",
+      "service_task_mappings",
+    ];
+    for (const table of requiredTables) one(`SELECT COUNT(*) n FROM ${table}`);
+
+    if (one("SELECT COUNT(*) n FROM import_meta WHERE id = 1") !== 1) {
+      throw new Error("validation failed: import_meta must contain exactly one id=1 row");
+    }
+
+    const fkRows = db.prepare("PRAGMA foreign_key_check").all();
+    if (fkRows.length > 0) {
+      throw new Error(`validation failed: foreign_key_check returned ${fkRows.length} row(s)`);
+    }
+
+    const badServiceCounts = one(
+      `SELECT COUNT(*) n
+       FROM schedule_templates st
+       WHERE st.service_item_count != (
+         SELECT COUNT(*) FROM schedule_items si WHERE si.schedule_hash = st.schedule_hash
+       )`,
+    );
+    if (badServiceCounts > 0) {
+      throw new Error(`validation failed: ${badServiceCounts} schedule template(s) have mismatched service item counts`);
+    }
+
+    const badMileageCounts = one(
+      `SELECT COUNT(*) n
+       FROM schedule_templates st
+       WHERE st.mileage_point_count != (
+         SELECT COUNT(DISTINCT si.mileage) FROM schedule_items si WHERE si.schedule_hash = st.schedule_hash
+       )`,
+    );
+    if (badMileageCounts > 0) {
+      throw new Error(`validation failed: ${badMileageCounts} schedule template(s) have mismatched mileage point counts`);
+    }
+
+    const badVisibility = one(
+      `SELECT COUNT(*) n FROM service_task_mappings
+       WHERE is_customer_visible IS NOT NULL AND is_customer_visible NOT IN (0, 1)`,
+    );
+    if (badVisibility > 0) {
+      throw new Error(`validation failed: ${badVisibility} service_task_mappings row(s) have invalid is_customer_visible`);
+    }
+  } finally {
+    db.close();
+  }
+}
+
+function promoteDatabase(tempPath: string, outPath: string): void {
+  if (process.platform === "win32") cleanupDbFiles(outPath);
+  renameSync(tempPath, outPath);
+  rmSync(tempPath + "-wal", { force: true });
+  rmSync(tempPath + "-shm", { force: true });
+  rmSync(outPath + "-wal", { force: true });
+  rmSync(outPath + "-shm", { force: true });
+}
+
 /** Single streamed pass: sha256 + byte count + newline-delimited line count. */
 function hashCountFile(path: string): FileFacts {
   const h = createHash("sha256");
@@ -89,39 +165,39 @@ function hashCountFile(path: string): FileFacts {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const dataDir = resolve(args.dataDir);
-  const outPath = resolve(args.out);
+  const finalOutPath = resolve(args.out);
+  const outPath = `${finalOutPath}.tmp.${process.pid}`;
   const t0 = Date.now();
   const builtAt = new Date().toISOString();
+  let db: DB | null = null;
+  let stats: Record<string, number> = {};
 
-  for (const f of Object.values(FILES)) {
-    const p = join(dataDir, f);
-    if (!existsSync(p)) {
-      if (f === FILES.edges && args.skipEdges) continue;
-      throw new Error(`Missing artifact: ${p}`);
+  try {
+    for (const f of Object.values(FILES)) {
+      const p = join(dataDir, f);
+      if (!existsSync(p)) {
+        if (f === FILES.edges && args.skipEdges) continue;
+        throw new Error(`Missing artifact: ${p}`);
+      }
     }
-  }
 
-  mkdirSync(dirname(outPath), { recursive: true });
-  for (const suffix of ["", "-wal", "-shm"]) rmSync(outPath + suffix, { force: true });
+    mkdirSync(dirname(finalOutPath), { recursive: true });
+    cleanupDbFiles(outPath);
 
-  const db = new Database(outPath);
-  db.pragma("journal_mode = MEMORY");
-  db.pragma("synchronous = OFF");
-  db.exec(readFileSync(join(__dirname, "schema.sql"), "utf8"));
-  ensureSyncSchema(db); // Airtable admin-sync layer (mirror + log tables)
-  db.pragma("foreign_keys = ON");
+    db = new Database(outPath);
+    db.pragma("journal_mode = MEMORY");
+    db.pragma("synchronous = OFF");
+    db.exec(readFileSync(join(__dirname, "schema.sql"), "utf8"));
+    ensureSyncSchema(db); // Airtable admin-sync layer (mirror + log tables)
+    db.pragma("foreign_keys = ON");
 
-  const errors: string[] = [];
-  const stats: Record<string, number> = {};
-  const warnings: Array<{ severity: "info" | "warning" | "error"; code: string; message: string; sourceFile?: string; lineNo?: number; context?: unknown }> = [];
+    const errors: string[] = [];
+    stats = {};
+    const warnings: Array<{ severity: "info" | "warning" | "error"; code: string; message: string; sourceFile?: string; lineNo?: number; context?: unknown }> = [];
 
-  function failClosed(): never {
-    console.error(`FAIL-CLOSED: ${errors.length} integrity error(s):`);
-    for (const e of errors) console.error("  " + e);
-    db.close();
-    for (const suffix of ["", "-wal", "-shm"]) rmSync(outPath + suffix, { force: true });
-    process.exit(1);
-  }
+    function failClosed(): never {
+      throw new Error(failClosedMessage(errors));
+    }
 
   // ---- 1. Templates + exploded schedule_items (FK parents come first) -------
   const insTpl = db.prepare(`INSERT INTO schedule_templates
@@ -142,6 +218,14 @@ async function main(): Promise<void> {
     const rawJson = String(o["Schedule JSON"]);
     const items = JSON.parse(rawJson) as ScheduleItem[];
     const g = gridStats(items);
+    const expectedServiceItems = Number(o["Service Item Count"]);
+    const expectedMileagePoints = Number(o["Mileage Point Count"]);
+    if (!Number.isInteger(expectedServiceItems) || expectedServiceItems !== items.length) {
+      errors.push(`template ${hash}: Service Item Count ${expectedServiceItems} != parsed Schedule JSON item count ${items.length}`);
+    }
+    if (!Number.isInteger(expectedMileagePoints) || expectedMileagePoints !== g.grid.length) {
+      errors.push(`template ${hash}: Mileage Point Count ${expectedMileagePoints} != parsed Schedule JSON mileage point count ${g.grid.length}`);
+    }
     const isEmpty = items.length === 0 ? 1 : 0;
     if (isEmpty) emptyTemplateHashes.push(hash);
     insTpl.run(
@@ -167,6 +251,7 @@ async function main(): Promise<void> {
   db.exec("COMMIT");
   stats.schedule_templates = tplCount;
   stats.schedule_items = itemCount;
+  if (errors.length > 0) failClosed();
   if (emptyTemplateHashes.length > 0) {
     warnings.push({
       severity: "warning",
@@ -335,12 +420,24 @@ async function main(): Promise<void> {
   stats.import_warnings = warnings.length;
 
   db.pragma("journal_mode = WAL");
+  db.pragma("wal_checkpoint(TRUNCATE)");
   db.pragma("optimize");
   db.close();
+  db = null;
+
+  validateDatabase(outPath);
+  promoteDatabase(outPath, finalOutPath);
 
   const secs = ((Date.now() - t0) / 1000).toFixed(1);
-  console.log(`OK  ${outPath}  (${secs}s, etl ${ETL_VERSION})`);
+  console.log(`OK  ${finalOutPath}  (${secs}s, etl ${ETL_VERSION})`);
   for (const [k, v] of Object.entries(stats)) console.log(`  ${k.padEnd(22)} ${v}`);
+  } catch (err) {
+    if (db) {
+      try { db.close(); } catch { /* ignore close failure during cleanup */ }
+    }
+    cleanupDbFiles(outPath);
+    throw err;
+  }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

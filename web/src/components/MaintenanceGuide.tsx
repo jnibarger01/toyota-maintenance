@@ -1,14 +1,18 @@
 import type { GuideResponse } from "../api";
+import { EmptyState } from "./States";
 
-/** Guide tab — the seven-section advisor guide; internal section clearly flagged. */
+/** Customer guide. Internal sections are rejected defensively even if an older API returns one. */
 export function MaintenanceGuide({ guide }: { guide: GuideResponse }) {
+  const sections = guide.guide.sections.filter((section) => !section.internal);
+  if (sections.length === 0) {
+    return <EmptyState title="No public guide content available" hint="The factory schedule grid is still available." />;
+  }
   return (
     <div className="guide">
-      {guide.guide.sections.map((s) => (
-        <section key={s.id} className={s.internal ? "guide-section guide-internal" : "guide-section"}>
+      {sections.map((s) => (
+        <section key={s.id} className="guide-section">
           <h3 className="section-header section-header-sub">
             {s.title}
-            {s.internal ? <span className="tag tag-internal">Internal — not printed</span> : null}
           </h3>
           {s.paragraphs.map((p, i) => <p key={i}>{p}</p>)}
           {s.items && s.items.length > 0 ? (

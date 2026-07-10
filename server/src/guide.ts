@@ -234,3 +234,70 @@ export function generateAdvisorGuide(result: LookupResult, delta: ConditionDelta
     sections: [vehicleSummary, dueNow, whyItMatters, nextVisit, conditionNotes, provenance, internalNotes],
   };
 }
+
+/**
+ * Public customer presentation derived from the advisor guide.
+ *
+ * The API deliberately keeps the richer advisor builder available for internal
+ * use, but its public route returns only schedule-backed sections. Dealership
+ * mappings, internal notes, benefit claims, full identifiers, prices, labor,
+ * and op codes never cross this boundary.
+ */
+export function generateCustomerGuide(result: LookupResult, delta: ConditionDelta | null = null): AdvisorGuide {
+  const severeOnly = new Set(
+    delta && result.vehicle.driving_condition === "Severe" ? delta.only_in_current : [],
+  );
+  const publicIds = new Set([
+    "vehicle_summary",
+    "due_now",
+    "next_visit",
+    "driving_condition_notes",
+    "source_provenance",
+  ]);
+  const guide = generateAdvisorGuide(result, delta);
+  return {
+    sections: guide.sections
+      .filter((section) => !section.internal && publicIds.has(section.id))
+      .map((section) => {
+        if (section.id === "due_now") {
+          return {
+            ...section,
+            title: "At this interval",
+            items: result.due_now
+              .filter(isVisible)
+              .map((task) => ({ label: task.task_name, tags: itemTags(task, severeOnly) })),
+          };
+        }
+        if (section.id === "source_provenance") {
+          return {
+            ...section,
+            paragraphs: [
+              `Factory schedule source: ${result.source.source}${result.source.schedule_name ? ` — ${result.source.schedule_name}` : ""}.`,
+              `Schedule reference ${result.source.config_key.slice(0, 10)} / ${result.source.schedule_hash.slice(0, 10)}.`,
+              "This presentation contains no VIN, customer, pricing, op-code, or labor information.",
+            ],
+          };
+        }
+        if (section.id === "driving_condition_notes") {
+          const selected = result.vehicle.driving_condition;
+          const paragraphs = [
+            `This lookup uses the ${selected} driving-condition schedule imported for this vehicle configuration.`,
+          ];
+          if (delta) {
+            if (selected === "Severe" && severeOnly.size > 0) {
+              paragraphs.push(
+                `${severeOnly.size} item${severeOnly.size === 1 ? "" : "s"} at this interval appear only on the Severe schedule when compared with the Normal schedule.`,
+              );
+            } else if (selected === "Normal" && delta.added_in_other.length > 0) {
+              paragraphs.push(
+                `The Severe schedule lists ${delta.added_in_other.length} additional item${delta.added_in_other.length === 1 ? "" : "s"} at the comparable interval.`,
+              );
+            }
+          }
+          paragraphs.push("Ask your advisor which published driving-condition schedule applies to the vehicle's use.");
+          return { ...section, paragraphs };
+        }
+        return section;
+      }),
+  };
+}

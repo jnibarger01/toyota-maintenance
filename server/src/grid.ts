@@ -1,8 +1,10 @@
 /**
  * GET /api/maintenance/grid builder.
  *
- * Window: 2 intervals before current, the current interval, and 3 after
- * (clipped at the ends; with no current interval yet, the first 3 upcoming).
+ * The default compatibility window is 2 intervals before current, the current
+ * interval, and 3 after (clipped at the ends; with no current interval yet,
+ * the first 3 upcoming). The additive full range renders a navigable 5,000
+ * mile axis plus every real published interval in the requested bounds.
  *
  * Rows collapse by display name — the task graph keys tasks per
  * (name × interval × menu), so one service appears as ONE row with a boolean
@@ -12,11 +14,13 @@
  * brakes, fluids, drivetrain, inspections).
  */
 import type { TaskIntervalRow } from "./queries.js";
+import { intervalContext } from "./intervals.js";
 
 export interface GridColumn {
   mileage: number;
   label: string;
   current?: true;
+  next?: true;
 }
 
 export interface GridCellDetail {
@@ -26,6 +30,7 @@ export interface GridCellDetail {
   priority: string | null;
   menu: string | null;
   menu_price_cents: number | null;
+  description: string | null;
 }
 
 export interface GridRow {
@@ -33,6 +38,7 @@ export interface GridRow {
   category: string;
   advisor_label: string | null;
   advisor_rank: number;
+  description: string | null;
   cells: Record<string, boolean>;
   details: GridCellDetail[];
 }
@@ -40,10 +46,21 @@ export interface GridRow {
 export interface MaintenanceGrid {
   columns: GridColumn[];
   rows: GridRow[];
+  currentInterval: number | null;
+  nextInterval: number | null;
+}
+
+export interface MaintenanceGridOptions {
+  range?: "nearby" | "full";
+  minMileage?: number;
+  maxMileage?: number;
 }
 
 const BEFORE = 2;
 const AFTER = 3;
+const FULL_STEP = 5_000;
+const DEFAULT_FULL_MIN = 0;
+const DEFAULT_FULL_MAX = 120_000;
 
 /** Classic advisor presentation order; specific name rules first, category fallbacks last. */
 export function advisorRank(taskName: string, category: string | null): number {
@@ -65,31 +82,58 @@ export function advisorRank(taskName: string, category: string | null): number {
   return 9;
 }
 
-export function buildMaintenanceGrid(tasks: TaskIntervalRow[], currentMileage: number): MaintenanceGrid {
-  const intervals = [...new Set(tasks.map((t) => t.interval_miles))].sort((a, z) => a - z);
-  if (intervals.length === 0) return { columns: [], rows: [] };
-
-  // Floor position; -1 when below the first interval.
-  let idx = -1;
-  for (let i = 0; i < intervals.length; i++) {
-    if (intervals[i] <= currentMileage) idx = i;
-    else break;
+/** Build a blank navigation axis; task cells stay false unless source rows exist. */
+function fullAxis(intervals: number[], minMileage: number, maxMileage: number): number[] {
+  const axis = new Set<number>([minMileage, maxMileage]);
+  const firstTick = Math.ceil(minMileage / FULL_STEP) * FULL_STEP;
+  for (let mileage = firstTick; mileage <= maxMileage; mileage += FULL_STEP) axis.add(mileage);
+  for (const mileage of intervals) {
+    if (mileage >= minMileage && mileage <= maxMileage) axis.add(mileage);
   }
-  const start = Math.max(0, idx - BEFORE);
-  const end = Math.min(intervals.length - 1, idx + AFTER); // idx = -1 -> first AFTER intervals
-  const window = intervals.slice(start, end + 1);
-  const windowSet = new Set(window);
+  return [...axis].sort((a, z) => a - z);
+}
 
-  const columns: GridColumn[] = window.map((m) =>
-    m === (idx >= 0 ? intervals[idx] : null)
-      ? { mileage: m, label: m.toLocaleString("en-US"), current: true }
-      : { mileage: m, label: m.toLocaleString("en-US") },
-  );
+export function buildMaintenanceGrid(
+  tasks: TaskIntervalRow[],
+  currentMileage: number,
+  options: MaintenanceGridOptions = {},
+): MaintenanceGrid {
+  const intervals = [...new Set(tasks.map((t) => t.interval_miles))].sort((a, z) => a - z);
+  const ctx = intervalContext(currentMileage, intervals);
+  const range = options.range ?? "nearby";
 
-  // Collapse by display name across the window.
+  let displayedMileages: number[];
+  let displayedTasks: TaskIntervalRow[];
+  if (range === "full") {
+    const minMileage = options.minMileage ?? DEFAULT_FULL_MIN;
+    const publishedMax = intervals.at(-1) ?? DEFAULT_FULL_MIN;
+    const maxMileage = options.maxMileage ?? Math.max(DEFAULT_FULL_MAX, publishedMax, minMileage);
+    displayedMileages = fullAxis(intervals, minMileage, maxMileage);
+    displayedTasks = tasks.filter((task) =>
+      task.interval_miles >= minMileage && task.interval_miles <= maxMileage,
+    );
+  } else if (intervals.length === 0) {
+    return { columns: [], rows: [], currentInterval: null, nextInterval: null };
+  } else {
+    // Floor position; -1 when below the first interval.
+    const idx = ctx.current === null ? -1 : intervals.indexOf(ctx.current);
+    const start = Math.max(0, idx - BEFORE);
+    const end = Math.min(intervals.length - 1, idx + AFTER); // idx = -1 -> first AFTER intervals
+    displayedMileages = intervals.slice(start, end + 1);
+    const displayedSet = new Set(displayedMileages);
+    displayedTasks = tasks.filter((task) => displayedSet.has(task.interval_miles));
+  }
+
+  const columns: GridColumn[] = displayedMileages.map((mileage) => {
+    const column: GridColumn = { mileage, label: mileage.toLocaleString("en-US") };
+    if (mileage === ctx.current) column.current = true;
+    if (mileage === ctx.next) column.next = true;
+    return column;
+  });
+
+  // Collapse by display name across the selected timeline.
   const byName = new Map<string, { rows: TaskIntervalRow[] }>();
-  for (const t of tasks) {
-    if (!windowSet.has(t.interval_miles)) continue;
+  for (const t of displayedTasks) {
     const g = byName.get(t.task_name) ?? { rows: [] };
     g.rows.push(t);
     byName.set(t.task_name, g);
@@ -100,12 +144,13 @@ export function buildMaintenanceGrid(tasks: TaskIntervalRow[], currentMileage: n
     const category = first.display_category ?? first.category ?? "Other";
     const present = new Set(g.rows.map((r) => r.interval_miles));
     const cells: Record<string, boolean> = {};
-    for (const m of window) cells[String(m)] = present.has(m);
+    for (const m of displayedMileages) cells[String(m)] = present.has(m);
     return {
       taskName,
       category,
       advisor_label: first.advisor_label,
       advisor_rank: advisorRank(taskName, category),
+      description: first.description,
       cells,
       details: g.rows
         .map((r) => ({
@@ -115,6 +160,7 @@ export function buildMaintenanceGrid(tasks: TaskIntervalRow[], currentMileage: n
           priority: r.priority,
           menu: r.menu,
           menu_price_cents: r.menu_price_cents,
+          description: r.description,
         }))
         .sort((a, z) => a.mileage - z.mileage),
     };
@@ -132,5 +178,10 @@ export function buildMaintenanceGrid(tasks: TaskIntervalRow[], currentMileage: n
     a.taskName.localeCompare(z.taskName),
   );
 
-  return { columns, rows };
+  return {
+    columns,
+    rows,
+    currentInterval: ctx.current,
+    nextInterval: ctx.next,
+  };
 }

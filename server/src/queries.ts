@@ -88,6 +88,7 @@ export interface ConfigFilters {
 export interface TaskIntervalRow {
   task_key: string;
   task_name: string;
+  description: string | null;
   category: string | null;
   priority: string | null;
   menu: string | null;
@@ -380,6 +381,13 @@ export class Lookup {
     ).all(...params) as ConfigRow[];
   }
 
+  /** Exact upstream configuration lookup for refresh-safe config-key routes. */
+  config(configKey: string): ConfigRow | undefined {
+    return this.db.prepare(
+      `SELECT ${CONFIG_ROW_COLS} FROM vehicle_configs WHERE config_key = ?`,
+    ).get(configKey) as ConfigRow | undefined;
+  }
+
   /**
    * Resolve the best config for a lookup request.
    * Hard filters (never relaxed): year, model, drivetrain, driving_condition.
@@ -421,7 +429,7 @@ export class Lookup {
       `(SELECT m.${col} FROM service_task_mappings m
          WHERE m.source_task_name = mt.task_name ${extra} ORDER BY m.id LIMIT 1)`;
     return this.db.prepare(
-      `SELECT mt.task_key, mt.task_name, mt.category, mt.priority, mt.menu, mt.service_id, mt.interval_miles,
+      `SELECT mt.task_key, mt.task_name, mt.description, mt.category, mt.priority, mt.menu, mt.service_id, mt.interval_miles,
               ${map("menu_price_cents", "AND m.menu_price_cents IS NOT NULL")} AS menu_price_cents,
               ${map("advisor_label", "AND m.advisor_label IS NOT NULL")}       AS advisor_label,
               ${map("op_code", "AND m.op_code IS NOT NULL")}                   AS op_code,

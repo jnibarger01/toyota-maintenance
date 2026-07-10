@@ -1,13 +1,19 @@
 /**
  * Fastify app factory. buildApp() so tests can fastify.inject() without a socket.
- * All routes are GET + read-only. No write path exists in this service.
+ * All routes are read-only GETs or lookup POSTs. No write path exists in this service.
  */
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import { Lookup, type VehicleFilters, type ConfigFilters } from "./queries.js";
-import { runMaintenanceLookup, resolveConfig, conditionDelta, type MaintenanceLookupInput } from "./maintenance.js";
+import {
+  runMaintenanceLookup,
+  resolveConfig,
+  conditionDelta,
+  customerSafeTasks,
+  type MaintenanceLookupInput,
+} from "./maintenance.js";
 import { buildMaintenanceGrid } from "./grid.js";
-import { generateAdvisorGuide } from "./guide.js";
+import { generateCustomerGuide } from "./guide.js";
 
 export interface AppOptions {
   dbPath: string;
@@ -37,6 +43,23 @@ function optStr(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
   const t = v.trim();
   return t === "" ? undefined : t;
+}
+
+function parseGridRange(v: unknown): "nearby" | "full" {
+  if (v === undefined || v === "") return "nearby";
+  if (typeof v !== "string") bad("range must be nearby or full");
+  const range = v.toLowerCase();
+  if (range !== "nearby" && range !== "full") bad("range must be nearby or full");
+  return range;
+}
+
+function parseGridBound(v: unknown, name: "minMileage" | "maxMileage"): number | undefined {
+  if (v === undefined || v === "") return undefined;
+  const mileage = Number(v);
+  if (!Number.isInteger(mileage) || mileage < 0 || mileage > MAX_MILEAGE) {
+    bad(`${name} must be an integer 0..${MAX_MILEAGE}`);
+  }
+  return mileage;
 }
 
 /** Canonicalize Normal/Severe (case-insensitive); anything else is a 400. */
@@ -163,17 +186,24 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     };
   });
 
+  app.get<{ Params: { key: string } }>("/api/configs/:key", async (req, reply) => {
+    const config = lookup.config(req.params.key);
+    if (!config) return reply.code(404).send({ error: "configuration not found" });
+    return config;
+  });
+
   // ---- Maintenance lookup (floor-interval model over task graph) -----------
 
   app.post("/api/maintenance/lookup", async (req, reply) => {
     const input = parseLookupBody((req.body ?? {}) as Record<string, unknown>);
-    const result = runMaintenanceLookup(lookup, input);
+    const result = runMaintenanceLookup(lookup, input, customerSafeTasks);
     if (!result) return reply.code(404).send({ error: "no vehicle configuration matches these selections" });
     return result;
   });
 
-  // Advisor grid: 2 intervals before current, current, 3 after; rows collapsed
-  // by display name, grouped by category in classic advisor order.
+  // Customer-safe grid: nearby compatibility window by default; range=full
+  // adds a navigable 5k axis plus real published intervals. Hidden tasks and
+  // all dealership-owned price/op/labor fields are removed before building.
   app.get("/api/maintenance/grid", async (req, reply) => {
     const q = req.query as Record<string, unknown>;
     const mileage = Number(q["currentMileage"]);
@@ -193,10 +223,23 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       currentMileage: mileage,
       overdueThresholdMiles: DEFAULT_OVERDUE_THRESHOLD,
     };
+    const range = parseGridRange(q["range"]);
+    const minMileage = parseGridBound(q["minMileage"], "minMileage");
+    const maxMileage = parseGridBound(q["maxMileage"], "maxMileage");
+    if (range !== "full" && (minMileage !== undefined || maxMileage !== undefined)) {
+      bad("minMileage and maxMileage require range=full");
+    }
+    if (minMileage !== undefined && maxMileage !== undefined && minMileage > maxMileage) {
+      bad("minMileage must be less than or equal to maxMileage");
+    }
     const best = resolveConfig(lookup, input);
     if (!best) return reply.code(404).send({ error: "no vehicle configuration matches these selections" });
 
-    const grid = buildMaintenanceGrid(lookup.taskIntervals(best.row.config_key), mileage);
+    const grid = buildMaintenanceGrid(customerSafeTasks(lookup.taskIntervals(best.row.config_key)), mileage, {
+      range,
+      minMileage,
+      maxMileage,
+    });
     return {
       vehicle: best.row,
       resolution: { matched_configs: best.matched_configs, relaxed_fields: best.relaxed_fields },
@@ -208,24 +251,25 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       },
       mileage: {
         current: mileage,
-        current_interval: grid.columns.find((c) => c.current)?.mileage ?? null,
+        current_interval: grid.currentInterval,
+        next_interval: grid.nextInterval,
       },
       columns: grid.columns,
       rows: grid.rows,
     };
   });
 
-  // Advisor guide: the lookup narrated in seven sections (last one internal-only).
+  // Customer guide: schedule-backed narrative only; no internal advisor section.
   app.post("/api/maintenance/guide", async (req, reply) => {
     const input = parseLookupBody((req.body ?? {}) as Record<string, unknown>);
-    const result = runMaintenanceLookup(lookup, input);
-    if (!result) return reply.code(404).send({ error: "no vehicle configuration matches these selections" });
-    const delta = conditionDelta(lookup, input, result);
+    const customerResult = runMaintenanceLookup(lookup, input, customerSafeTasks);
+    if (!customerResult) return reply.code(404).send({ error: "no vehicle configuration matches these selections" });
+    const delta = conditionDelta(lookup, input, customerResult);
     return {
-      vehicle: result.vehicle,
-      resolution: result.resolution,
-      source: result.source,
-      guide: generateAdvisorGuide(result, delta),
+      vehicle: customerResult.vehicle,
+      resolution: customerResult.resolution,
+      source: customerResult.source,
+      guide: generateCustomerGuide(customerResult, delta),
     };
   });
 

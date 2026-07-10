@@ -1,4 +1,4 @@
-# Toyota Maintenance Cockpit
+# Toyota Maintenance
 
 Service-advisor lookup tool: pick a vehicle configuration and an odometer reading, get the
 factory maintenance items due now, the next milestone, nearby milestones, an OEM-style interval
@@ -12,7 +12,7 @@ Xtime scrape artifacts ──► Airtable import artifacts (JSONL)
                                     ▼
                           SQLite lookup DB (tmc.db)
                                     │
-                              server (Fastify)          (read-only, GET-only)
+                              server (Fastify)          (read-only API)
                                     ▼
                               web (React/Vite)          (Grid / List / Guide / Print)
 ```
@@ -77,10 +77,11 @@ codes, labor hours, and menu pricing may ever live; dealership-owned, never writ
 table, and a schema test enforces that.
 
 Known upstream state: one template is legitimately empty (`sha256("[]")`), referenced by 20
-configurations (2010 Corolla Normal rows and 2026 bZ EVs). The ETL loads them and the API/UI
-surface them honestly as `schedule_empty` instead of failing or fabricating intervals.
+configurations (2010 Corolla Normal rows and 2026 bZ EVs). A fresh ETL build retains them and
+the API/UI surface them honestly as `schedule_empty`; the older adjacent 7,202-row SQLite
+artifact omits those 20 records and must be rebuilt before they are selectable there.
 
-## API (all GET, all read-only)
+## API (all read-only)
 
 | Route | Purpose |
 | --- | --- |
@@ -88,27 +89,33 @@ surface them honestly as `schedule_empty` instead of failing or fabricating inte
 | `/api/years` | distinct years, newest first |
 | `/api/models?year=` | distinct models for a year |
 | `/api/configs?year=&model=&trim=&engine=&engine_size=&drivetrain=&transmission=&driving_condition=` | matching configs (partial filters OK, empty → `[]`, capped at 500 with `truncated` flag); `engine` accepts a type (`V6`) or the full string (`V6 4.0L`); text matches are case-insensitive |
+| `/api/configs/:key` | exact condition-specific configuration by upstream Config Key (404 when absent) |
 | `POST /api/maintenance/lookup` | task-graph maintenance lookup (see below) — a read-only query despite the verb |
-| `GET /api/maintenance/grid?…&currentMileage=` | advisor grid: 2 intervals before current, current (flagged), 3 after; rows collapsed by display name with per-interval drilldown `details`; category blocks ordered oil → rotation → filters → brakes → fluids → drivetrain → inspections; `advisor_label`/`display_category` overlay from `service_task_mappings` when mapped |
-| `POST /api/maintenance/guide` | seven-section advisor guide from the same lookup body: vehicle summary, due now, why it matters, next visit, driving-condition notes, source/provenance, and an `internal: true` section (op codes, labor hours, prices, overdue-verify list). Toyota task names stay visible; "required" wording appears only when the task priority says so; Severe-only items are labeled via a live Normal↔Severe delta; no raw JSON in any section |
+| `GET /api/maintenance/grid?…&currentMileage=` | customer-safe advisor grid. The default remains 2 intervals before/current/3 after. Add `range=full` for a 0–120,000+ timeline; optional `minMileage`/`maxMileage` bounds are validated. Full mode adds navigation ticks but never fabricates task cells. |
+| `POST /api/maintenance/guide` | customer-safe factual guide from the same lookup body: vehicle summary, current tasks, next visit, schedule-backed condition comparison, and source/provenance. Internal mapping fields are filtered before serialization. |
 | `/api/options?year=&model=&…` | distinct values per selector dimension under the current partial filter, plus `matching_schedules` — powers the cascading form |
 | `/api/schedules/resolve?…` | filters → matching schedule rows (404 if none; UI requires exactly 1) |
 | `/api/schedules/:key` | vehicle + full milestone grid + every item + provenance (feeds the Grid tab) |
 | `/api/schedules/:key/due?mileage=&monthly_miles=` | the cockpit payload: snapped due-now milestone + items, next milestone (+ est. months if monthly miles given), 5 nearby milestones, Normal↔Severe delta at this milestone, provenance |
 
 **`POST /api/maintenance/lookup`** takes `{year, model, trim?, engine?, engineSize?, drivetrain?,
-transmission?, drivingCondition?, currentMileage, avgMonthlyMileage?, overdueThresholdMiles?}` and
-resolves the **best** config: year/model/drivetrain/drivingCondition are hard filters; trim →
-engineSize → engine → transmission are relaxed in that order until something matches, and every
-relaxation is reported in `resolution.relaxed_fields` (never silent). It then groups the config's
-linked `maintenance_tasks` by `interval_miles` — verified to mirror the milestone grid exactly —
+transmission?, drivingCondition?, currentMileage, avgMonthlyMileage?, overdueThresholdMiles?}`.
+The public customer route requires one exact, non-relaxed configuration match; missing or
+ambiguous dimensions return 404 instead of selecting an arbitrary vehicle. It then groups the
+configuration's customer-visible `maintenance_tasks` by `interval_miles` — verified to mirror
+the milestone grid exactly —
 and applies a **floor** model: `current_interval` = greatest interval ≤ mileage, `next_interval`
 = smallest above, `due_now` = tasks at current, `upcoming` = tasks at next, `overdue` = tasks at
 the *previous* interval once mileage exceeds it by `overdueThresholdMiles` (default 1,000; env
 `TMC_OVERDUE_THRESHOLD_MILES`). `estimate` projects months/date to the next interval from
-`avgMonthlyMileage`. Per-task `menu_price_cents` is `null` unless `service_task_mappings` has an
-explicit dealership price. No cycle wrap here (above the final interval, `next` is `null`), and a
-`--skip-edges` build returns empty intervals for this endpoint.
+`avgMonthlyMileage`. Public task payloads always null price, operation-code, and labor fields and
+remove mappings marked not customer-visible. No cycle wrap occurs here (above the final interval,
+`next` is `null`), and a `--skip-edges` build returns empty intervals for this endpoint.
+
+Compatibility note: this exact-match/customer-safe lookup behavior, the sanitized default grid,
+and the five-section customer guide replace the earlier relaxed/internal advisor responses.
+Clients that consumed best-match results, mapped prices/op codes/labor, or the seven-section
+advisor guide must migrate; endpoint paths remain stable.
 
 Milestone math on `/api/schedules/:key/due` (tested): snap to nearest grid point, **ties round
 up** (72,500 → 75,000);
@@ -119,21 +126,49 @@ Input limits: `mileage` integer 1–500,000; `monthly_miles` 0–15,000. Anythin
 
 ## UI
 
-Left rail = RO-header-style write-up: Year → Model → Trim → Engine → Engine size → (variant if
-needed) → Drivetrain → Transmission → Driving condition, plus odometer and average monthly
-miles. Dimensions with exactly one valid value auto-fill (e.g. every 2020 4Runner is V6 4.0L
-Automatic). Tabs:
+React Router makes the customer flow deep-linkable and reload-safe:
 
-- **Grid** — item × milestone matrix across the five nearby milestones; due column red, next
-  column amber.
+```text
+/cockpit
+/cockpit/:year
+/vehicle/:year/:modelSlug
+/schedule/:year/:modelSlug
+/schedule/:year/:modelSlug/:configId
+/schedule/:year/:modelSlug/print
+```
+
+One model card represents each year/model combination; trim, full engine/variant,
+engine size, transmission, drivetrain, condition, odometer, and optional monthly mileage are
+selected on the vehicle route. Tabs:
+
+- **Grid** — horizontally scrollable item × mileage matrix from 0 through at least 120,000
+  miles, with sticky task/header cells, current/next highlights, jump controls, and factual task
+  inspection.
 - **List** — due-now checklist + next-milestone preview.
-- **Guide** — advisor walk-through: snap rationale, items grouped by category, Normal↔Severe
-  delta at this milestone, next-visit projection with a suggested booking month.
-- **Print** — customer sheet preview + `Print customer sheet` (print CSS hides the app and
-  prints only the sheet: checkbox list, next visit, provenance footer, no pricing).
+- **Guide** — customer-safe vehicle summary, current tasks, next visit, schedule-backed
+  Normal↔Severe comparison, and shortened source provenance.
+- **Print** — dedicated, refresh-safe customer preview plus an explicit browser print action;
+  print CSS emits only the factual sheet and no pricing.
 
 Extrapolated readings and empty source schedules are disclosed on-screen and on the printed
-sheet. The UI keeps no persistent state (no localStorage, no cookies).
+sheet. Route/query state is the persistent browser contract; the UI uses no localStorage or
+cookies.
+
+## Vehicle catalog audit
+
+The adjacent available export contains 7,222 condition-specific rows spanning 2001–2026,
+3,618 physical configurations, and 20 configuration rows sharing one authentic empty template. The catalog importer supports
+the requested 2000–2026 envelope but strict validation intentionally fails until authentic
+year-2000 rows are supplied:
+
+```bash
+npm run vehicle:validate -- --mode sample --data-dir /path/to/export
+npm run vehicle:import -- --mode sample --data-dir /path/to/export
+npm run vehicle:validate -- --mode full --data-dir /path/to/export
+```
+
+The generated catalog is compact metadata; raw schedules and task edges are not bundled into
+the frontend. See `WORKLOG.md` for audited totals and exact evidence paths.
 
 ## Airtable admin sync (backend/CLI only)
 
@@ -189,7 +224,8 @@ but applied.
 ## Tests
 
 ```bash
-npm test        # 122 tests: etl 40, server 68 (incl. dedupe regression), web 14 (incl. Airtable guard)
+npm test        # 166 tests: ETL 55, server 85, web 26
+npm run build   # ETL/server TypeScript + web TypeScript/Vite production build
 ```
 
 Coverage includes the required cases: **2020 4Runner SR5 4WD at ~70,000 mi** (7 Normal items, 14
@@ -205,8 +241,7 @@ you want one to poke at).
 ```
 etl/      schema.sql (v0.2), lib.ts (parsers, fail-closed), build-db.ts (streaming JSONL → SQLite)
 server/   milestones.ts + intervals.ts (pure math), maintenance.ts (lookup service), grid.ts, guide.ts, queries.ts, app.ts
-web/      React cockpit: Year -> Model -> Details -> Results (Grid | List | Guide tabs) + print sheet
-web/      React cockpit (VehicleForm, MilestoneRail, Grid/List/Guide views, PrintSheet)
+web/      React Router cockpit: cockpit -> model -> vehicle -> schedule -> print preview
 fixtures/ 2020 4Runner artifact slice (JSONL) used by the test suite
 scripts/  make_fixtures.py — regenerate the fixture slice from full artifacts
 ```

@@ -1,21 +1,24 @@
-/** Step 2 — pick the model. */
-export function ModelGrid({ year, models, onSelect, onBack }: {
+import { Link } from "react-router-dom";
+import { modelSlug } from "../data/schema";
+
+/** One card per distinct model; configurations are selected on the next route. */
+export function ModelGrid({ year, models }: {
   year: number;
   models: string[];
-  onSelect: (model: string) => void;
-  onBack: () => void;
 }) {
+  const distinctModels = [...new Set(models)];
   return (
     <section aria-labelledby="model-heading">
       <div className="section-header-row">
         <h2 id="model-heading" className="section-header">Select model · {year}</h2>
-        <button type="button" className="btn btn-link" onClick={onBack}>Change year</button>
+        <Link className="btn btn-link" to="/cockpit">Change year</Link>
       </div>
       <div className="tile-grid tile-grid-models">
-        {models.map((m) => (
-          <button key={m} type="button" className="tile tile-model" onClick={() => onSelect(m)}>
-            {m}
-          </button>
+        {distinctModels.map((m) => (
+          <Link key={m} className="tile tile-model" to={`/vehicle/${year}/${modelSlug(m)}`}>
+            <span>{m}</span>
+            <span className="tile-meta">Choose configuration</span>
+          </Link>
         ))}
       </div>
     </section>

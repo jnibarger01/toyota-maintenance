@@ -3,4 +3,6 @@ dist/
 *.db
 *.db-wal
 *.db-shm
-!fixtures/tmc-fixture.db
+.env
+.env.*
+!.env.example

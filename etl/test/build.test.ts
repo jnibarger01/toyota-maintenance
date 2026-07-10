@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,5 +97,41 @@ describe("build-db against 2020 4Runner fixtures (DoD #1, schema v0.2)", () => {
     expect(row.engine_type).toBe("V6");
     expect(row.engine_size).toBe("4.0L");
     db.close();
+  });
+
+  it("leaves an existing final DB untouched when artifact JSON parsing fails", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tmc-etl-parse-"));
+    const dataDir = join(dir, "data");
+    const out = join(dir, "existing.db");
+    cpSync(fixtures, dataDir, { recursive: true });
+    writeFileSync(out, "previous-db");
+    writeFileSync(join(dataDir, "unique_schedule_templates.jsonl"), "{not json}\n");
+
+    expect(() => execFileSync("node", [buildScript, "--data-dir", dataDir, "--out", out], { stdio: "pipe" }))
+      .toThrow();
+    expect(readFileSync(out, "utf8")).toBe("previous-db");
+    expect(readdirSync(dir).some((name) => name.startsWith("existing.db.tmp."))).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("fails before promotion when template counts disagree with parsed Schedule JSON", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tmc-etl-counts-"));
+    const dataDir = join(dir, "data");
+    const out = join(dir, "existing.db");
+    cpSync(fixtures, dataDir, { recursive: true });
+    writeFileSync(out, "previous-db");
+
+    const templatePath = join(dataDir, "unique_schedule_templates.jsonl");
+    const lines = readFileSync(templatePath, "utf8").trimEnd().split("\n");
+    const first = JSON.parse(lines[0]) as Record<string, unknown>;
+    first["Service Item Count"] = Number(first["Service Item Count"]) + 1;
+    lines[0] = JSON.stringify(first);
+    writeFileSync(templatePath, lines.join("\n") + "\n");
+
+    expect(() => execFileSync("node", [buildScript, "--data-dir", dataDir, "--out", out], { stdio: "pipe" }))
+      .toThrow();
+    expect(readFileSync(out, "utf8")).toBe("previous-db");
+    expect(readdirSync(dir).some((name) => name.startsWith("existing.db.tmp."))).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

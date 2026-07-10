@@ -1,124 +1,129 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  fetchYears, fetchModels, fetchOptions, postLookup, fetchGrid,
-  type GridResponse, type LookupBody, type LookupResult, type OptionsResponse,
-} from "./api";
-import { YearSelector } from "./components/YearSelector";
-import { ModelGrid } from "./components/ModelGrid";
-import { VehicleDetailsForm } from "./components/VehicleDetailsForm";
-import { MaintenanceResults } from "./components/MaintenanceResults";
-import { PrintSheet } from "./components/PrintSheet";
-import { LoadingState, EmptyState, ErrorState } from "./components/States";
+  BrowserRouter,
+  Link,
+  Navigate,
+  NavLink,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
+import { CarFront, LayoutGrid, Printer } from "lucide-react";
+import { SourceBadge } from "./components/SourceBadge";
+import {
+  CockpitPage,
+  ModelsPage,
+  NotFoundPage,
+  PrintPreviewPage,
+  SchedulePage,
+  VehiclePage,
+} from "./routes/pages";
+import type { HeaderPresentation, ShellOutletContext } from "./routes/shellContext";
 
-type Step = "year" | "model" | "details" | "results";
+function AppShell() {
+  const location = useLocation();
+  const [headerPresentation, setHeaderPresentation] = useState<HeaderPresentation | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const results = location.pathname.startsWith("/schedule/");
+  const context = useMemo<ShellOutletContext>(() => ({ setHeaderPresentation }), []);
+  const vehicleMatch = location.pathname.match(/^\/(?:vehicle|schedule)\/([^/]+)\/([^/]+)/);
+  const vehicleTo = vehicleMatch ? `/vehicle/${vehicleMatch[1]}/${vehicleMatch[2]}` : "/cockpit";
 
-interface AppState {
-  step: Step;
-  years: number[];
-  year: number | null;
-  models: string[];
-  model: string | null;
-  options: OptionsResponse | null;
-  body: LookupBody | null;
-  result: LookupResult | null;
-  grid: GridResponse | null;
-  loading: string | null;
-  error: string | null;
-}
+  useEffect(() => {
+    if (!results) setHeaderPresentation(null);
+  }, [results]);
 
-const initial: AppState = {
-  step: "year", years: [], year: null, models: [], model: null,
-  options: null, body: null, result: null, grid: null, loading: null, error: null,
-};
-
-export default function App() {
-  const [s, setS] = useState<AppState>(initial);
-
-  const fail = (e: unknown) =>
-    setS((p) => ({ ...p, loading: null, error: e instanceof Error ? e.message : "request failed" }));
-
-  const loadYears = () => {
-    setS((p) => ({ ...p, loading: "Loading years…", error: null }));
-    fetchYears()
-      .then((years) => setS((p) => ({ ...p, years, loading: null })))
-      .catch(fail);
-  };
-
-  useEffect(loadYears, []);
-
-  const pickYear = (year: number) => {
-    setS((p) => ({ ...p, year, loading: "Loading models…", error: null }));
-    fetchModels(year)
-      .then((models) => setS((p) => ({ ...p, models, step: "model", loading: null })))
-      .catch(fail);
-  };
-
-  const pickModel = (model: string) => {
-    setS((p) => ({ ...p, model, loading: "Loading options…", error: null }));
-    fetchOptions(s.year!, model)
-      .then((options) => setS((p) => ({ ...p, options, step: "details", loading: null })))
-      .catch(fail);
-  };
-
-  const submit = (body: LookupBody) => {
-    setS((p) => ({ ...p, body, loading: "Looking up schedule…", error: null }));
-    Promise.all([postLookup(body), fetchGrid(body)])
-      .then(([result, grid]) => setS((p) => ({ ...p, result, grid, step: "results", loading: null })))
-      .catch(fail);
-  };
+  useEffect(() => {
+    mainRef.current?.focus({ preventScroll: true });
+  }, [location.pathname]);
 
   return (
-    <div className="app">
+    <div className="app" data-step={results ? "results" : "selection"}>
       <header className="app-header no-print">
-        {/* Official Hendrick Automotive Group mark (from brand-standard EPS, unaltered).
-            A dealership-specific logo must come from HendrickBrandSupport.com. */}
-        <img className="brand-logo" src="/brand/hag-color.png" alt="Hendrick Automotive Group™" />
-        <div className="app-title-block">
-          <h1>Toyota Maintenance Cockpit</h1>
-          <span className="app-tag">Hendrick Toyota Merriam · Service Department · factory schedule lookup</span>
+        <div className="brand-lockup">
+          <img className="brand-logo" src="/brand/hag-color.png" alt="Hendrick Automotive Group™" />
         </div>
-      </header>
-      <div className="speed-lines no-print" aria-hidden="true"><span /><span /><span /></div>
-
-      <main className="app-main no-print">
-        {s.error ? (
-          <ErrorState
-            message={s.error}
-            onRetry={() => {
-              if (s.step === "year") loadYears();
-              else setS((p) => ({ ...p, error: null }));
-            }}
-          />
-        ) : s.loading ? (
-          <LoadingState label={s.loading} />
-        ) : s.step === "year" ? (
-          s.years.length === 0
-            ? <EmptyState title="No model years available" hint="Check that the lookup API is running." />
-            : <YearSelector years={s.years} onSelect={pickYear} />
-        ) : s.step === "model" ? (
-          s.models.length === 0
-            ? <EmptyState title="No models for this year" />
-            : <ModelGrid year={s.year!} models={s.models} onSelect={pickModel} onBack={() => setS((p) => ({ ...p, step: "year" }))} />
-        ) : s.step === "details" && s.options ? (
-          <VehicleDetailsForm
-            year={s.year!} model={s.model!} options={s.options}
-            onSubmit={submit}
-            onBack={() => setS((p) => ({ ...p, step: "model" }))}
-          />
-        ) : s.step === "results" && s.result && s.grid && s.body ? (
-          <MaintenanceResults
-            result={s.result} grid={s.grid} body={s.body}
-            onStartOver={() => setS({ ...initial, years: s.years })}
-          />
+        <div className="app-title-block">
+          <h1>Maintenance Cockpit</h1>
+          <span className="app-tag">Hendrick Toyota Merriam · Factory schedule presentation</span>
+        </div>
+        {headerPresentation ? (
+          <div className="header-actions">
+            <SourceBadge source={headerPresentation.source} />
+            <Link
+              className={headerPresentation.printCount === 0 ? "header-print disabled" : "header-print"}
+              aria-disabled={headerPresentation.printCount === 0}
+              onClick={(event) => { if (headerPresentation.printCount === 0) event.preventDefault(); }}
+              to={headerPresentation.printTo}
+            >
+              <Printer size={21} aria-hidden="true" />
+              <span>Print</span>
+              <span className="print-count num">{headerPresentation.printCount}</span>
+              <span className="sr-only">
+                {` included ${headerPresentation.printCount === 1 ? "task" : "tasks"} — open print preview`}
+              </span>
+            </Link>
+          </div>
         ) : null}
-      </main>
+      </header>
 
-      {s.result ? <PrintSheet result={s.result} /> : null}
+      <div className="app-body no-print">
+        <nav className="app-rail" aria-label="Cockpit navigation">
+          <NavLink
+            to="/cockpit"
+            className={location.pathname.startsWith("/cockpit") ? "rail-current" : "rail-action"}
+          >
+            <LayoutGrid size={27} aria-hidden="true" />
+            <span className="rail-label">Cockpit</span>
+          </NavLink>
+          {vehicleMatch ? (
+            <NavLink
+              to={vehicleTo}
+              className={location.pathname.startsWith("/vehicle") || results ? "rail-current" : "rail-action"}
+              title="Change vehicle configuration"
+            >
+              <CarFront size={27} aria-hidden="true" />
+              <span className="rail-label">Vehicle</span>
+            </NavLink>
+          ) : null}
+        </nav>
 
-      <footer className="app-footer no-print">
-        Factory maintenance schedules, straight from the source — no VIN needed, no guesswork.
-        Prices appear only when they come from our own service menu.
-      </footer>
+        <div className="app-content">
+          <main ref={mainRef} className="app-main" tabIndex={-1}>
+            <Outlet context={context} />
+          </main>
+          <footer className="app-footer">
+            Imported factory maintenance schedules, shown without VIN, customer, pricing, labor, or op-code data.
+          </footer>
+        </div>
+      </div>
     </div>
+  );
+}
+
+/** Exported separately so route tests can use MemoryRouter without nesting routers. */
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate replace to="/cockpit" />} />
+      <Route path="/schedule/:year/:modelSlug/print" element={<PrintPreviewPage />} />
+      <Route element={<AppShell />}>
+        <Route path="/cockpit" element={<CockpitPage />} />
+        <Route path="/cockpit/:year" element={<ModelsPage />} />
+        <Route path="/vehicle/:year/:modelSlug" element={<VehiclePage />} />
+        <Route path="/schedule/:year/:modelSlug" element={<SchedulePage />} />
+        <Route path="/schedule/:year/:modelSlug/:configId" element={<SchedulePage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <AppRoutes />
+    </BrowserRouter>
   );
 }

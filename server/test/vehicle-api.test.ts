@@ -146,6 +146,24 @@ describe("GET /api/configs", () => {
     expect(body.count).toBe(0);
     expect(body.configs).toEqual([]);
   });
+
+  it("returns one configuration by its stable upstream key", async () => {
+    const key = "317848a5f55d37ab8609e561e336899bc3bab32b";
+    const { status, body } = await get(`/api/configs/${key}`);
+
+    expect(status).toBe(200);
+    expect(body.config_key).toBe(key);
+    expect(body.year).toBe(2020);
+    expect(body.model).toBe("4RUNNER");
+    expect(body.schedule_hash).toBe(NORMAL_4WD_HASH);
+  });
+
+  it("returns 404 for an unknown configuration key", async () => {
+    const { status, body } = await get("/api/configs/not-a-real-key");
+
+    expect(status).toBe(404);
+    expect(body.error).toContain("configuration not found");
+  });
 });
 
 describe("POST /api/maintenance/lookup", () => {
@@ -197,16 +215,17 @@ describe("POST /api/maintenance/lookup", () => {
     expect(body.estimate.next_due_date).toBeNull();
   });
 
-  it("resolves the best config when the trim is unknown ('Base'), reporting the relaxation", async () => {
+  it("rejects unknown trim instead of silently relaxing customer lookup selections", async () => {
     const { status, body } = await post("/api/maintenance/lookup", { ...LOOKUP, trim: "Base" });
-    expect(status).toBe(200);
-    expect(body.resolution.relaxed_fields).toContain("trim");
-    expect(body.resolution.matched_configs).toBeGreaterThan(1);
-    expect(body.vehicle.driving_condition).toBe("Normal");
-    expect(body.vehicle.drivetrain).toBe("4WD");
-    // Every 4WD Normal trim shares one schedule, so the relaxed answer is content-identical.
-    expect(body.source.schedule_hash).toBe(NORMAL_4WD_HASH);
-    expect(body.due_now).toHaveLength(7);
+    expect(status).toBe(404);
+    expect(JSON.stringify(body)).toContain("no vehicle configuration matches");
+  });
+
+  it("rejects an ambiguous customer lookup instead of selecting the first trim", async () => {
+    const { trim: _omit, ...withoutTrim } = LOOKUP;
+    const { status, body } = await post("/api/maintenance/lookup", withoutTrim);
+    expect(status).toBe(404);
+    expect(JSON.stringify(body)).toContain("no vehicle configuration matches");
   });
 
   it("severe vs normal driving condition produce different config and schedule", async () => {

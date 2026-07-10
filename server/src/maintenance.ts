@@ -18,6 +18,7 @@ export interface MaintenanceLookupInput {
   currentMileage: number;
   avgMonthlyMileage?: number | null;
   overdueThresholdMiles: number;
+  allowRelaxedLookup?: boolean;
 }
 
 export interface LookupResult {
@@ -39,7 +40,7 @@ export interface LookupResult {
 }
 
 export function resolveConfig(lookup: Lookup, input: MaintenanceLookupInput): BestConfig | null {
-  return lookup.resolveBestConfig({
+  const best = lookup.resolveBestConfig({
     year: input.year,
     model: input.model,
     trim: input.trim,
@@ -49,13 +50,25 @@ export function resolveConfig(lookup: Lookup, input: MaintenanceLookupInput): Be
     transmission: input.transmission,
     driving_condition: input.drivingCondition,
   });
+  if (!best) return null;
+  // Customer-facing callers must resolve exactly one configuration. A partial
+  // filter can match several trims without relaxing any field; choosing the
+  // first row would present that arbitrary trim as if the customer selected it.
+  if (!input.allowRelaxedLookup && (best.relaxed_fields.length > 0 || best.matched_configs !== 1)) return null;
+  return best;
 }
 
-export function runMaintenanceLookup(lookup: Lookup, input: MaintenanceLookupInput): LookupResult | null {
+export function runMaintenanceLookup(
+  lookup: Lookup,
+  input: MaintenanceLookupInput,
+  taskTransform: (tasks: TaskIntervalRow[]) => TaskIntervalRow[] = (tasks) => tasks,
+): LookupResult | null {
   const best = resolveConfig(lookup, input);
   if (!best) return null;
 
-  const tasks = lookup.taskIntervals(best.row.config_key);
+  // Apply customer visibility before deriving mileage context so a hidden-only
+  // interval cannot appear in the KPIs/list while disappearing from the grid.
+  const tasks = taskTransform(lookup.taskIntervals(best.row.config_key));
   const intervals = [...new Set(tasks.map((t) => t.interval_miles))].sort((a, z) => a - z);
   const ctx = intervalContext(input.currentMileage, intervals);
   const at = (m: number | null) => (m === null ? [] : tasks.filter((t) => t.interval_miles === m));
@@ -87,6 +100,24 @@ export function runMaintenanceLookup(lookup: Lookup, input: MaintenanceLookupInp
   };
 }
 
+export function customerSafeTask(t: TaskIntervalRow): TaskIntervalRow | null {
+  if (t.customer_visible === 0) return null;
+  return {
+    ...t,
+    menu_price_cents: null,
+    op_code: null,
+    labor_hours: null,
+    customer_visible: null,
+  };
+}
+
+export function customerSafeTasks(tasks: TaskIntervalRow[]): TaskIntervalRow[] {
+  return tasks.flatMap((t) => {
+    const safe = customerSafeTask(t);
+    return safe ? [safe] : [];
+  });
+}
+
 /**
  * Delta vs the opposite driving condition at the same current interval —
  * feeds honest "Severe adds N items" guide language. Null when no sibling.
@@ -106,12 +137,13 @@ export function conditionDelta(lookup: Lookup, input: MaintenanceLookupInput, re
     model: result.vehicle.model,
     trim: result.vehicle.trim ?? undefined,
     engine: result.vehicle.engine ?? undefined,
+    engine_size: result.vehicle.engine_size ?? undefined,
     drivetrain: result.vehicle.drivetrain ?? undefined,
     transmission: result.vehicle.transmission ?? undefined,
     driving_condition: other,
   });
-  if (!sibling) return null;
-  const sibTasks = lookup.taskIntervals(sibling.row.config_key);
+  if (!sibling || sibling.relaxed_fields.length > 0) return null;
+  const sibTasks = customerSafeTasks(lookup.taskIntervals(sibling.row.config_key));
   const sibIntervals = [...new Set(sibTasks.map((t) => t.interval_miles))].sort((a, z) => a - z);
   const sibCtx = intervalContext(input.currentMileage, sibIntervals);
   const sibNames = new Set(

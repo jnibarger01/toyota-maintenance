@@ -1,15 +1,19 @@
 import type { Source } from "../api";
+import { Database } from "lucide-react";
 
-/** Compact provenance pill: source system + short schedule reference. */
+/** Customer-safe provenance badge: factual source plus a short schedule reference. */
 export function SourceBadge({ source }: { source: Source }) {
-  const shortRef = `${source.config_key.slice(0, 10)}…`;
+  const shortRef = `${source.config_key.slice(0, 10)} / ${source.schedule_hash.slice(0, 10)}`;
   return (
     <span
       className="source-badge"
-      title={`${source.source} · config ${source.config_key} · schedule ${source.schedule_hash}`}
+      title={`Factory schedule reference ${shortRef}`}
     >
-      <span className="source-badge-system">{source.source}</span>
-      <span className="source-badge-ref">{shortRef}</span>
+      <Database size={18} strokeWidth={2} aria-hidden="true" />
+      <span className="source-badge-copy">
+        <span className="source-badge-label">Factory schedule</span>
+        <span className="source-badge-system">Source: {source.source}</span>
+      </span>
     </span>
   );
 }
