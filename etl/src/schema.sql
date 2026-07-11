@@ -1,4 +1,4 @@
--- Toyota Maintenance Cockpit — SQLite schema v0.2 (schema hardening)
+-- Toyota Maintenance — SQLite schema v0.2 (schema hardening)
 --
 -- Contract:
 --   * Source ingestion tables carry NO VIN, NO customer data, NO prices,
