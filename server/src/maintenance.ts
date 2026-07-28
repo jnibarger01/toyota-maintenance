@@ -101,7 +101,10 @@ export function runMaintenanceLookup(
 }
 
 export function customerSafeTask(t: TaskIntervalRow): TaskIntervalRow | null {
-  if (t.customer_visible === 0) return null;
+  // Customer presentations intentionally show replacement services only.
+  // Inspections, rotations, checks, cleaning, tightening, and other action
+  // types remain preserved in the source database but never reach the UI.
+  if (t.customer_visible === 0 || !/^\s*replace\b/i.test(t.task_name)) return null;
   return {
     ...t,
     menu_price_cents: null,
